@@ -6,38 +6,44 @@ import { dirname, join } from "node:path";
 import type { PactPolicy, PolicyValidationResult } from "./types";
 
 function loadSchemaJson(): unknown {
-  // When bundled, code runs from dist/index.js (or node_modules/@pact/sdk/dist/index.js when installed)
-  // Schema is at dist/schema.json (same directory as index.js)
-  const here = dirname(fileURLToPath(import.meta.url)); // dist/ (or node_modules/@pact/sdk/dist/)
+  const here = dirname(fileURLToPath(import.meta.url));
   
-  // If we're not already in dist/, look for dist/schema.json
-  // This handles cases where import.meta.url might point to the package root
-  let schemaPath: string;
-  if (here.endsWith('/dist') || here.endsWith('\\dist')) {
-    // We're already in dist/, schema.json is in the same directory
-    schemaPath = join(here, "schema.json");
-  } else {
-    // We're in the package root, schema.json is in dist/
-    schemaPath = join(here, "dist", "schema.json");
+  // Always try schema.json relative to current file first
+  // This works when in source (src/policy/schema.json) 
+  // and when bundled (schema would be copied to same location)
+  const pathsToTry: string[] = [
+    join(here, "schema.json"),
+  ];
+  
+  // Determine if we're in source or dist
+  const isInSource = here.includes('/src/policy') || here.includes('\\src\\policy');
+  const isInDist = here.endsWith('/dist') || here.endsWith('\\dist') || 
+                   here.includes('/dist/policy') || here.includes('\\dist\\policy');
+  
+  if (isInSource) {
+    // If in source, also try dist/ (for built/runtime scenarios)
+    // Go up from src/policy/ to package root, then to dist/
+    const packageRoot = here.replace(/[/\\]src[/\\]policy.*$/i, '');
+    pathsToTry.push(join(packageRoot, "dist", "schema.json"));
+  } else if (isInDist) {
+    // If in dist, also try source (for development)
+    // Go up from dist/ to package root, then to src/policy/
+    const packageRoot = here.replace(/[/\\]dist.*$/i, '');
+    pathsToTry.push(join(packageRoot, "src", "policy", "schema.json"));
   }
   
-  // Try the primary path first
-  if (existsSync(schemaPath)) {
-    const content = readFileSync(schemaPath, "utf-8");
-    return JSON.parse(content);
+  // Try each path in order
+  for (const schemaPath of pathsToTry) {
+    if (existsSync(schemaPath)) {
+      const content = readFileSync(schemaPath, "utf-8");
+      return JSON.parse(content);
+    }
   }
   
-  // Fallback: try same directory (in case we're already in dist/)
-  const fallbackPath = join(here, "schema.json");
-  if (existsSync(fallbackPath)) {
-    const content = readFileSync(fallbackPath, "utf-8");
-    return JSON.parse(content);
-  }
-  
+  const allPaths = pathsToTry.join('\n  - ');
   throw new Error(
     `Schema file not found. Tried:\n` +
-    `  - ${schemaPath}\n` +
-    `  - ${fallbackPath}\n` +
+    `  - ${allPaths}\n` +
     `import.meta.url: ${import.meta.url}\n` +
     `Resolved directory: ${here}`
   );

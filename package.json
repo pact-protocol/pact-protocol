@@ -4,7 +4,7 @@
   "private": true,
   "description": "Pact agent negotiation protocol monorepo",
   "scripts": {
-    "build": "pnpm -r build",
+    "build": "pnpm -C packages/sdk build && pnpm -C packages/provider-adapter build",
     "test": "pnpm -r test",
     "release": "pnpm -r build && pnpm -r test && changeset publish",
     "version-packages": "changeset version",
