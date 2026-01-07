@@ -1,0 +1,14 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+      "composite": false,
+      "incremental": false,
+      "tsBuildInfoFile": null,
+      "declaration": true,
+      "declarationMap": false
+    },
+    "files": [],
+    "include": ["src/**/*.ts"],
+    "exclude": ["src/**/__tests__/**", "src/**/*.test.ts", "dist", "node_modules"]
+  }
+  

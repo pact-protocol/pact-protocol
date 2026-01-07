@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+*.tsbuildinfo
+coverage/
+printf "\n# Local artifacts\nnode_modules/\ndist/\npackages/demo/demo_receipts.jsonl\n" >> .gitignore
+

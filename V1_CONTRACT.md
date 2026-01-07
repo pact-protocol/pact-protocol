@@ -1,0 +1,223 @@
+# PACT v1.0 Contract
+
+This document defines the **exact guarantees** for PACT v1.0. These are contracts that will not change within the v1 major version.
+
+---
+
+## What PACT v1.0 Is
+
+PACT v1.0 is a **two-agent acquire + settlement protocol** with:
+
+- **Directory-based provider discovery** (JSONL registry or in-memory)
+- **Cryptographic verification** (Ed25519 signatures, signer must match directory pubkey)
+- **Deterministic negotiation** (same inputs → same outcome)
+- **Settlement execution** (hash-reveal or streaming)
+- **Receipt generation** (verifiable, immutable outcomes)
+
+PACT v1.0 enables autonomous agents to:
+1. Discover counterparties via a directory
+2. Negotiate terms under policy constraints
+3. Select the best provider deterministically
+4. Execute settlement with cryptographic guarantees
+5. Produce verifiable receipts for accounting/reputation
+
+---
+
+## Supported Settlement Modes
+
+PACT v1.0 supports **exactly two** settlement modes:
+
+### 1. `hash_reveal` (Required)
+
+**What it is:**
+- Atomic commit-reveal settlement
+- Provider commits to `SHA256(payload + nonce)`
+- Provider reveals `payload + nonce`
+- Buyer verifies hash before payment release
+
+**Success criteria:**
+- Provider commits a valid hash
+- Provider reveals matching payload + nonce
+- Hash verification succeeds
+- Payment is released to provider
+- Receipt is generated with `fulfilled: true`
+
+**Failure modes:**
+- `FAILED_PROOF` — hash verification failed
+- `FAILED_ESCROW` — insufficient funds
+- Timeout — deadline exceeded
+
+### 2. `streaming` (Optional)
+
+**What it is:**
+- Continuous pay-as-you-go settlement
+- Provider streams chunks incrementally
+- Buyer pays per tick
+- Either side may stop early
+
+**Success criteria:**
+- Provider streams chunks with valid signatures
+- Buyer pays incrementally per tick
+- Either side may stop gracefully
+- Receipt reflects partial fulfillment (`paid_amount`, `ticks`, `chunks`)
+
+**Failure modes:**
+- `BUYER_STOPPED` — buyer halted early (not necessarily a failure)
+- `SELLER_STOPPED` — seller halted early
+- `HTTP_STREAMING_ERROR` — HTTP endpoint failed
+- `STREAMING_SPEND_CAP_EXCEEDED` — budget exhausted
+
+**Guarantee**: These are the only settlement modes in v1.0. No additional modes will be added without a major version bump.
+
+---
+
+## Protocol Invariants
+
+The following **must always hold** in PACT v1.0:
+
+1. **No payment without verification**
+   - Funds are never released without cryptographic proof
+   - Hash-reveal: hash must verify before payment
+   - Streaming: signatures must verify for each chunk
+
+2. **Signer must match directory pubkey**
+   - Provider's `signer_public_key_b58` must exactly match `pubkey_b58` in directory
+   - Mismatch results in `PROVIDER_SIGNER_MISMATCH` rejection
+   - This is a security requirement, not optional
+
+3. **Timeouts are enforced**
+   - `expires_at_ms` on messages is checked
+   - `delivery_deadline_ms` on agreements is enforced
+   - Timeout results in `FAILED_PROOF` or settlement failure
+
+4. **Deterministic outcomes**
+   - Same inputs (intent, providers, policy, time) → same result
+   - No hidden randomness
+   - All clocks are injected explicitly
+
+5. **Receipts are immutable**
+   - Once created, receipts cannot be modified
+   - Receipts are deterministic (same settlement → same receipt)
+   - Receipts are verifiable (can be validated independently)
+
+**Violation of any invariant indicates a bug in the implementation.**
+
+---
+
+## Receipt Schema
+
+A buyer **always** receives a Receipt after settlement completes (or fails). The receipt schema is:
+
+```typescript
+{
+  receipt_id: string;           // Format: "receipt-{intent_id}-{timestamp_ms}"
+  intent_id: string;             // Matches the intent_id from negotiation
+  buyer_agent_id: string;        // Buyer's agent identifier
+  seller_agent_id: string;       // Seller's agent identifier (pubkey_b58)
+  agreed_price: number;          // Price agreed in ACCEPT (positive number)
+  fulfilled: boolean;            // true if delivery succeeded, false if failed
+  latency_ms?: number;           // Optional: actual delivery latency
+  failure_code?: FailureCode;    // Optional: present if fulfilled=false
+  paid_amount?: number;          // Optional: actual amount paid (for streaming)
+  ticks?: number;                // Optional: number of ticks (for streaming)
+  chunks?: number;               // Optional: number of chunks (for streaming)
+  timestamp_ms: number;          // Receipt generation timestamp
+}
+```
+
+### Receipt Verification Rules
+
+1. **Completeness**: All receipts include `receipt_id`, `intent_id`, `buyer_agent_id`, `seller_agent_id`, `agreed_price`, `fulfilled`, `timestamp_ms`
+2. **Failure codes**: If `fulfilled: false`, `failure_code` must be present and be a valid `FailureCode`
+3. **Streaming fields**: For streaming settlements, `paid_amount`, `ticks`, and `chunks` are present
+4. **Immutability**: Receipts are immutable once created
+5. **Determinism**: Same settlement outcome produces the same receipt
+
+**Guarantee**: The receipt schema is stable in v1.0. Fields will not be removed or change meaning without a major version bump.
+
+---
+
+## Failure Modes and Codes
+
+PACT v1.0 defines explicit failure codes. All failures are deterministic and enumerable.
+
+### Discovery / Selection
+- `DIRECTORY_EMPTY` — No providers available for the intent type
+- `NO_PROVIDERS` — Directory returned no providers
+- `NO_ELIGIBLE_PROVIDERS` — Providers existed but all were rejected
+
+### Identity / Verification
+- `PROVIDER_SIGNATURE_INVALID` — Provider envelope signature verification failed
+- `PROVIDER_SIGNER_MISMATCH` — Signer pubkey doesn't match expected provider pubkey
+- `UNTRUSTED_ISSUER` — Provider credential issuer not in trusted issuers list
+- `FAILED_IDENTITY` — Identity verification failed
+
+### Policy / Constraints
+- `PROVIDER_MISSING_REQUIRED_CREDENTIALS` — Provider lacked required credentials
+- `PROVIDER_QUOTE_POLICY_REJECTED` — Quote rejected by policy guard
+- `PROVIDER_QUOTE_OUT_OF_BAND` — Price violated reference band constraints
+- `FAILED_REFERENCE_BAND` — Quote price outside acceptable reference price band
+
+### Settlement
+- `FAILED_ESCROW` — Insufficient funds or lock failure
+- `FAILED_PROOF` — Commit/reveal hash verification failed
+- `BUYER_STOPPED` — Buyer halted streaming early (not necessarily a provider fault)
+- `HTTP_STREAMING_ERROR` — HTTP streaming endpoint failed
+- `HTTP_PROVIDER_ERROR` — HTTP provider endpoint error
+- `STREAMING_NOT_CONFIGURED` — Streaming policy not configured
+- `NO_AGREEMENT` — No agreement found after ACCEPT
+- `NO_RECEIPT` — No receipt generated after settlement
+
+### Other
+- `INVALID_POLICY` — Policy validation failed
+
+**Guarantee**: These failure codes are stable in v1.0. New codes may be added, but existing codes will not change meaning or be removed without a major version bump.
+
+---
+
+## Non-Goals / Excluded
+
+PACT v1.0 **explicitly does not**:
+
+- **Move money or custody assets** — PACT coordinates settlement but does not execute payments
+- **Clear trades or settle payments** — Payment execution is external to PACT
+- **Provide wallet functionality** — Wallets are out of scope
+- **Implement market-making or order books** — PACT is pre-market, not a market
+- **Handle subjective quality disputes** — Only objective failures are supported
+- **Support human-in-the-loop arbitration** — Fully autonomous agents only
+- **Provide cross-chain settlement** — Single-chain/rail only in v1.0
+
+**Guarantee**: Features outside this scope will not be added to v1.0 without a major version bump.
+
+---
+
+## Deterministic Dev Identity
+
+For **development and testing only**, PACT provides a deterministic provider identity:
+
+- **Seed**: `"pact-provider-default-seed-v1"` (default)
+- **Generation**: `nacl.sign.keyPair.fromSeed(SHA256(seed))`
+- **Result**: Same seed → same keypair → same `sellerId` every run
+
+**This is NOT for production use.**
+
+Production providers **must**:
+- Use cryptographically secure random keypairs
+- Store keypairs securely (HSMs, key management systems)
+- Never use predictable or hardcoded seeds
+- Follow proper KYA (Know Your Agent) identity management
+
+**Guarantee**: The deterministic dev identity is a development convenience only. It will not be used in production deployments.
+
+---
+
+## Versioning
+
+PACT follows semantic versioning:
+
+- **v1.0.0** — Initial stable release with these exact guarantees
+- **v1.x.x** — Backward-compatible additions (new optional fields, new error codes)
+- **v2.0.0** — Breaking changes (new settlement modes, schema changes, invariant changes)
+
+**Guarantee**: All guarantees in this document hold for the entire v1 major version.
+

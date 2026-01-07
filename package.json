@@ -1,0 +1,34 @@
+{
+  "name": "pact-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pact agent negotiation protocol monorepo",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "release": "pnpm -r build && pnpm -r test && changeset publish",
+    "version-packages": "changeset version",
+    "changeset": "changeset",
+    "lint": "pnpm -r lint",
+    "check:specs": "node scripts/check-specs.mjs",
+    "demo": "pnpm -C packages/demo demo",
+    "provider:serve": "pnpm -C packages/provider-adapter start",
+    "provider:register": "pnpm -C packages/provider-adapter registry:register",
+    "provider:list": "pnpm -C packages/provider-adapter registry:list",
+    "demo:buy": "pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse",
+    "demo:happy": "pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo happy",
+    "demo:price-too-high": "pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo price-too-high",
+    "demo:timeout": "pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo timeout",
+    "demo:bad-reveal": "pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo bad-reveal",
+    "demo:streaming": "pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --mode streaming"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.8",
+    "@types/node": "^20.10.6",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}

@@ -1,0 +1,3 @@
+// Test import
+import { DefaultPolicyGuard } from "../../sdk/src/policy/defaultGuard.js";
+console.log("Import successful:", DefaultPolicyGuard);
