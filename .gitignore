@@ -4,5 +4,21 @@ dist/
 .DS_Store
 *.tsbuildinfo
 coverage/
-printf "\n# Local artifacts\nnode_modules/\ndist/\npackages/demo/demo_receipts.jsonl\n" >> .gitignore
 
+# Local artifacts
+packages/demo/demo_receipts.jsonl
+
+# Backup and temp files
+*.backup
+*.tmp
+
+# Package tarballs (built artifacts)
+*.tgz
+
+# Provider registry (keep root one, exclude duplicates)
+packages/provider-adapter/providers.jsonl
+
+# Local binaries (if accidentally committed)
+/pnpm
+/tsx
+/vitest
