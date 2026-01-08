@@ -51,6 +51,10 @@ No open-ended haggling. No hidden state.
 
 ---
 
+## Settlement
+
+PACT is **payment-rail agnostic**. The settlement interface can be implemented by custodial wallets, on-chain smart contracts, payment processors, or mock providers (default). See [V1_5.md](./V1_5.md#settlement-seams-v155) for details.
+
 ## Settlement Modes
 
 PACT currently supports two settlement modes:

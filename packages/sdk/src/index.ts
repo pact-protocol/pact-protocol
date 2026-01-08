@@ -18,6 +18,7 @@ export * from "./engine/index";
 // Settlement
 export * from "./settlement/provider";
 export * from "./settlement/mock";
+export * from "./settlement/external";
 
 // Exchange
 export * from "./exchange/receipt";

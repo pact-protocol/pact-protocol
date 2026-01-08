@@ -36,6 +36,37 @@ export class MockSettlementProvider implements SettlementProvider {
     return this.acct(agentId).locked;
   }
 
+  // ============================================================================
+  // Core Settlement Operations (Formalized)
+  // ============================================================================
+
+  lock(agentId: string, amount: number): void {
+    const success = this.lockFunds(agentId, amount);
+    if (!success) {
+      throw new Error(`Insufficient balance to lock ${amount} for agent ${agentId}`);
+    }
+  }
+
+  release(agentId: string, amount: number): void {
+    this.unlock(agentId, amount);
+  }
+
+  pay(from: string, to: string, amount: number, meta?: Record<string, unknown>): void {
+    if (!(amount > 0)) throw new Error("amount must be > 0");
+    const fromAcct = this.acct(from);
+    if (fromAcct.balance < amount) {
+      throw new Error(`Insufficient balance to pay ${amount} from ${from} to ${to}`);
+    }
+    fromAcct.balance -= amount;
+    this.acct(to).balance += amount;
+    // meta is ignored in mock implementation but available for external providers
+  }
+
+  slashBond(providerId: string, amount: number, beneficiaryId: string, meta?: Record<string, unknown>): void {
+    this.slash(providerId, beneficiaryId, amount);
+    // meta is ignored in mock implementation but available for external providers
+  }
+
   credit(agentId: string, amount: number): void {
     if (!(amount >= 0)) throw new Error("amount must be >= 0");
     // balance represents available balance

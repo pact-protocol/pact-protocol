@@ -36,7 +36,13 @@ export class TranscriptStore {
     
     // Sanitize intentId for filename (remove invalid chars)
     const sanitizedId = intentId.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const filename = `${sanitizedId}.json`;
+    
+    // Include timestamp in filename for uniqueness
+    // Use transcript.timestamp_ms if available, otherwise use current time
+    const timestamp = transcript?.timestamp_ms || Date.now();
+    const timestampStr = new Date(timestamp).toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, -5); // Format: 2024-01-15_14-30-45
+    
+    const filename = `${sanitizedId}_${timestampStr}.json`;
     const filepath = path.join(targetDir, filename);
     
     // Write pretty JSON

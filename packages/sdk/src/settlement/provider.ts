@@ -1,15 +1,174 @@
+/**
+ * SettlementProvider Interface
+ * 
+ * Defines the contract for payment settlement in PACT. This interface is payment-rail agnostic:
+ * implementations can use custodial wallets, on-chain smart contracts, or other payment systems.
+ * 
+ * Core invariants:
+ * - All amounts must be >= 0
+ * - Balance queries return available (unlocked) balance
+ * - Locked funds are not available for payment until unlocked
+ * - Operations are atomic (all-or-nothing)
+ * 
+ * Error behavior:
+ * - Invalid amounts (< 0) should throw Error
+ * - Insufficient balance should return false (for lock operations) or throw Error (for pay/slash)
+ * - External providers may throw network/API errors
+ */
 export interface SettlementProvider {
+  /**
+   * Get available (unlocked) balance for an agent.
+   * @param agentId Agent identifier (pubkey_b58 or similar)
+   * @returns Available balance (>= 0)
+   */
   getBalance(agentId: string): number;
+
+  /**
+   * Get locked balance for an agent.
+   * @param agentId Agent identifier
+   * @returns Locked balance (>= 0)
+   */
+  getLocked(agentId: string): number;
+
+  // ============================================================================
+  // Core Settlement Operations (Formalized)
+  // ============================================================================
+
+  /**
+   * Lock funds from available balance.
+   * Moves funds from available to locked state.
+   * 
+   * @param agentId Agent identifier
+   * @param amount Amount to lock (must be >= 0)
+   * @throws Error if amount < 0 or if insufficient balance
+   * 
+   * Invariants:
+   * - getBalance(agentId) decreases by amount
+   * - getLocked(agentId) increases by amount
+   * - Total (balance + locked) remains constant
+   * - locked cannot go negative
+   */
+  lock(agentId: string, amount: number): void;
+
+  /**
+   * Release locked funds back to available balance.
+   * Moves funds from locked to available state.
+   * 
+   * @param agentId Agent identifier
+   * @param amount Amount to release (must be >= 0)
+   * @throws Error if amount < 0 or if amount > locked balance
+   * 
+   * Invariants:
+   * - getLocked(agentId) decreases by amount
+   * - getBalance(agentId) increases by amount
+   * - Total (balance + locked) remains constant
+   * - Release restores locked → balance
+   */
+  release(agentId: string, amount: number): void;
+
+  /**
+   * Transfer funds from one agent to another.
+   * Moves funds from available balance of 'from' to available balance of 'to'.
+   * 
+   * @param from Source agent identifier
+   * @param to Destination agent identifier
+   * @param amount Amount to transfer (must be > 0)
+   * @param meta Optional metadata for the payment (intent_id, receipt_id, etc.)
+   * @throws Error if amount <= 0 or if insufficient balance
+   * 
+   * Invariants:
+   * - getBalance(from) decreases by amount
+   * - getBalance(to) increases by amount
+   * - Total balance across all agents remains constant
+   * - Requires sufficient locked or balance (match current behavior)
+   */
+  pay(from: string, to: string, amount: number, meta?: Record<string, unknown>): void;
+
+  /**
+   * Slash a provider's bond and transfer to beneficiary.
+   * Removes funds from provider (from locked first, then available) and credits beneficiary.
+   * Used for penalty enforcement (e.g., FAILED_PROOF).
+   * 
+   * @param providerId Provider agent identifier (bond holder)
+   * @param amount Amount to slash (must be > 0)
+   * @param beneficiaryId Beneficiary agent identifier (typically buyer)
+   * @param meta Optional metadata for the slash (failure_code, receipt_id, etc.)
+   * @throws Error if amount <= 0 or if provider has insufficient total balance
+   * 
+   * Invariants:
+   * - getBalance(providerId) + getLocked(providerId) decreases by amount
+   * - getBalance(beneficiaryId) increases by amount
+   * - Prefers slashing from locked funds first
+   * - Reduces provider funds and credits beneficiary (buyer)
+   */
+  slashBond(providerId: string, amount: number, beneficiaryId: string, meta?: Record<string, unknown>): void;
+
+  // ============================================================================
+  // Legacy/Convenience Methods (for backward compatibility)
+  // ============================================================================
+
+  /**
+   * Credit funds to an agent's available balance.
+   * Legacy method - equivalent to external deposit.
+   * 
+   * @param agentId Agent identifier
+   * @param amount Amount to credit (must be >= 0)
+   * @throws Error if amount < 0
+   */
   credit(agentId: string, amount: number): void;
+
+  /**
+   * Debit funds from an agent's available balance.
+   * Legacy method - use pay() for transfers between agents.
+   * 
+   * @param agentId Agent identifier
+   * @param amount Amount to debit (must be >= 0)
+   * @throws Error if amount < 0 or if insufficient balance
+   */
   debit(agentId: string, amount: number): void;
 
+  /**
+   * Lock funds (legacy alias for lock()).
+   * @deprecated Use lock() instead
+   */
   lockFunds(agentId: string, amount: number): boolean;
+
+  /**
+   * Lock bond (legacy alias for lock()).
+   * @deprecated Use lock() instead
+   */
   lockBond(agentId: string, amount: number): boolean;
+
+  /**
+   * Unlock funds (legacy alias for release()).
+   * @deprecated Use release() instead
+   */
   unlock(agentId: string, amount: number): void;
 
+  /**
+   * Release funds to an agent (legacy alias for credit()).
+   * @deprecated Use credit() or pay() instead
+   */
   releaseFunds(toAgentId: string, amount: number): void;
+
+  /**
+   * Slash funds (legacy alias for slashBond()).
+   * @deprecated Use slashBond() instead
+   */
   slash(fromAgentId: string, toAgentId: string, amount: number): void;
 
+  /**
+   * Streaming tick payment (legacy method).
+   * Transfers funds from buyer to seller for a single streaming tick.
+   * 
+   * @param buyerId Buyer agent identifier
+   * @param sellerId Seller agent identifier
+   * @param amount Amount to transfer (must be > 0)
+   * @returns true if payment succeeded, false if insufficient balance
+   * @throws Error if amount <= 0
+   * 
+   * Note: This is equivalent to pay(buyerId, sellerId, amount) but kept for clarity.
+   */
   streamTick(buyerId: string, sellerId: string, amount: number): boolean;
 }
 
