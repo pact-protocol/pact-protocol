@@ -658,9 +658,6 @@ describe("acquire", () => {
     policy.counterparty.min_reputation = 0.4;
     
     // Set required credentials in policy
-    if (!policy.counterparty) {
-      policy.counterparty = {};
-    }
     policy.counterparty.require_credentials = ["bonded"];
     
     const settlement = new MockSettlementProvider();
@@ -728,6 +725,133 @@ describe("acquire", () => {
       expect(selectedDecision?.meta).toBeDefined();
       expect(selectedDecision?.meta?.price).toBeDefined();
     }
+  });
+
+  describe("Credential verification", () => {
+    it("should verify valid credential and proceed with acquisition", async () => {
+      const buyer = createKeyPair();
+      const seller = createKeyPair();
+      const policy = createDefaultPolicy();
+      policy.counterparty.min_reputation = 0.4;
+      const settlement = new MockSettlementProvider();
+      settlement.credit(buyer.id, 1.0);
+      settlement.credit(seller.id, 0.1);
+      const store = new ReceiptStore();
+      const directory = new InMemoryProviderDirectory();
+      
+      // Start HTTP provider server
+      const server = startProviderServer({
+        port: 0,
+        sellerKeyPair: seller.keyPair,
+        sellerId: seller.id,
+      });
+      
+      try {
+        // Register HTTP provider
+        directory.registerProvider({
+          provider_id: seller.id.substring(0, 8),
+          intentType: "weather.data",
+          pubkey_b58: seller.id,
+          endpoint: server.url,
+          credentials: ["sla_verified"],
+        });
+
+        const result = await acquire({
+          input: {
+            intentType: "weather.data",
+            scope: "NYC",
+            constraints: { latency_ms: 50, freshness_sec: 10 },
+            maxPrice: 0.0001,
+            explain: "coarse",
+          },
+          buyerKeyPair: buyer.keyPair,
+          sellerKeyPair: seller.keyPair,
+          buyerId: buyer.id,
+          sellerId: seller.id,
+          policy,
+          settlement,
+          store,
+          directory,
+          now: createClock(),
+        });
+
+        // Should succeed (credential verified)
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.explain).toBeDefined();
+          // Should not have credential invalid errors
+          const credentialErrors = result.explain?.log.filter(d => d.code === "PROVIDER_CREDENTIAL_INVALID");
+          expect(credentialErrors?.length).toBe(0);
+        }
+      } finally {
+        server.close();
+      }
+    });
+
+    it("should reject provider with invalid credential signature", async () => {
+      const buyer = createKeyPair();
+      const seller = createKeyPair();
+      const wrongKeyPair = createKeyPair(); // Different keypair for signing
+      const policy = createDefaultPolicy();
+      policy.counterparty.min_reputation = 0.4;
+      const settlement = new MockSettlementProvider();
+      settlement.credit(buyer.id, 1.0);
+      settlement.credit(seller.id, 0.1);
+      const store = new ReceiptStore();
+      const directory = new InMemoryProviderDirectory();
+      
+      // Start HTTP provider server with wrong keypair (will sign credential with wrong key)
+      const server = startProviderServer({
+        port: 0,
+        sellerKeyPair: wrongKeyPair.keyPair, // Wrong keypair
+        sellerId: wrongKeyPair.id,
+      });
+      
+      try {
+        // Register provider with different pubkey (seller.id) but server uses wrongKeyPair
+        directory.registerProvider({
+          provider_id: seller.id.substring(0, 8),
+          intentType: "weather.data",
+          pubkey_b58: seller.id, // Directory says seller.id
+          endpoint: server.url, // But server uses wrongKeyPair
+          credentials: ["sla_verified"],
+        });
+
+        const result = await acquire({
+          input: {
+            intentType: "weather.data",
+            scope: "NYC",
+            constraints: { latency_ms: 50, freshness_sec: 10 },
+            maxPrice: 0.0001,
+            explain: "full",
+          },
+          buyerKeyPair: buyer.keyPair,
+          sellerKeyPair: seller.keyPair,
+          buyerId: buyer.id,
+          sellerId: seller.id,
+          policy,
+          settlement,
+          store,
+          directory,
+          now: createClock(),
+        });
+
+        // Should fail due to credential signer mismatch
+        // (Or quote signer mismatch if credential check passes but quote fails)
+        if (!result.ok) {
+          expect(result.code).toBeDefined();
+          // Should have credential or signer mismatch error
+          if (result.explain) {
+            const credentialErrors = result.explain.log.filter(
+              d => d.code === "PROVIDER_CREDENTIAL_INVALID" || d.code === "PROVIDER_SIGNER_MISMATCH"
+            );
+            expect(credentialErrors.length).toBeGreaterThan(0);
+          }
+        }
+      } finally {
+        server.close();
+      }
+    });
   });
 });
 

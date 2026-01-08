@@ -172,18 +172,22 @@ Get PACT running in under 5 minutes:
 ### Terminal A: Start Provider Server
 
 ```bash
-pnpm provider:serve
+pnpm provider:serve:demo
 ```
 
-This starts a provider server on `http://127.0.0.1:7777` with a deterministic dev identity.
+This starts a provider server on `http://127.0.0.1:7777` with a deterministic demo identity.
 
-**Important**: Note the `sellerId` printed on startup. You'll need it for the registry.
+**Identity modes:**
+- **Demo** (`provider:serve:demo`): Uses deterministic seed for consistent demo setup
+- **Production** (`provider:serve`): Set `PACT_PROVIDER_SECRET_KEY_B58` or `PACT_PROVIDER_KEYPAIR_FILE` env vars
+- **Dev seed** (opt-in): Set `PACT_DEV_IDENTITY_SEED` env var (prints warning)
+- **Ephemeral** (default): Random keypair on each start (no warning)
 
 **Example output:**
 ```
 [Provider Server] sellerId: 8MAHFtsAtkENKMukXZoRUhNXCtJExDHEsUPSR19rjBDp
 [Provider Server] Started on http://127.0.0.1:7777
-[Provider Server] ⚠️  WARNING: Using DEV-ONLY deterministic identity (NOT for production)
+[Provider Server] Identity mode: dev_seed
 ```
 
 ### Terminal B: Register Provider & Run Demo
@@ -193,12 +197,16 @@ This starts a provider server on `http://127.0.0.1:7777` with a deterministic de
 ```bash
 pnpm provider:register -- \
   --intent weather.data \
-  --pubkey 8MAHFtsAtkENKMukXZoRUhNXCtJExDHEsUPSR19rjBDp \
+  --pubkey <sellerId_from_terminal_A> \
   --endpoint http://127.0.0.1:7777 \
   --credentials sla_verified \
   --region us-east \
   --baselineLatencyMs 50
 ```
+
+Replace `<sellerId_from_terminal_A>` with the `sellerId` printed in Terminal A.
+
+**Note**: With `provider:serve:demo`, the `sellerId` is deterministic and will be the same every time, so you only need to register once. The pubkey will match the demo seed.
 
 This creates/updates `providers.jsonl` in the repo root.
 
@@ -215,6 +223,7 @@ This runs the demo with:
 
 **Expected output:**
 - Provider discovery from registry
+- Credential verification (automatic for HTTP providers in v1.5+)
 - Quote negotiation
 - Settlement execution (hash_reveal)
 - Receipt with balances
@@ -249,6 +258,12 @@ import { acquire, validatePolicyJson } from "@pact/sdk";
 
 ### Running a Provider (example)
 
+**For demos:**
+```bash
+pnpm provider:serve:demo
+```
+
+**For production:**
 ```bash
 pnpm provider:serve
 ```

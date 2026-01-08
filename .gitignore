@@ -22,3 +22,8 @@ packages/provider-adapter/providers.jsonl
 /pnpm
 /tsx
 /vitest
+
+# Provider keypair files (contains secrets)
+keypair.json
+*.keypair.json
+*_keypair.json

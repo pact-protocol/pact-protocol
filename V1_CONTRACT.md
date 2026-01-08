@@ -149,6 +149,7 @@ PACT v1.0 defines explicit failure codes. All failures are deterministic and enu
 ### Identity / Verification
 - `PROVIDER_SIGNATURE_INVALID` — Provider envelope signature verification failed
 - `PROVIDER_SIGNER_MISMATCH` — Signer pubkey doesn't match expected provider pubkey
+- `PROVIDER_CREDENTIAL_INVALID` — (v1.5+) Credential verification failed (signature, signer mismatch, expired, or intent not supported)
 - `UNTRUSTED_ISSUER` — Provider credential issuer not in trusted issuers list
 - `FAILED_IDENTITY` — Identity verification failed
 

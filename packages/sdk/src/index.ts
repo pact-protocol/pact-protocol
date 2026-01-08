@@ -42,3 +42,6 @@ export * from "./directory/index";
 
 // Adapters
 export * from "./adapters/http/index";
+
+// KYA (Know Your Agent)
+export * from "./kya/index";

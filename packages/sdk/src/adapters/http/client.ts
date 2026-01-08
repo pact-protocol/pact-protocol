@@ -9,6 +9,7 @@ import type {
   StreamChunkResponse,
 } from "./types";
 import type { SignedEnvelope } from "../../protocol/envelope";
+import type { CredentialMessage } from "../../kya/types";
 
 export async function fetchQuote(
   baseUrl: string,
@@ -118,6 +119,28 @@ export async function fetchStreamChunk(
   }
 
   const data = await response.json() as StreamChunkResponse;
+  return { envelope: data.envelope };
+}
+
+export async function fetchCredential(
+  baseUrl: string,
+  intentType?: string
+): Promise<{ envelope: SignedEnvelope<CredentialMessage> }> {
+  const url = intentType 
+    ? `${baseUrl}/credential?intent=${encodeURIComponent(intentType)}`
+    : `${baseUrl}/credential`;
+  
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json() as { envelope: SignedEnvelope<CredentialMessage> };
   return { envelope: data.envelope };
 }
 

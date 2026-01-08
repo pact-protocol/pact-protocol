@@ -14,7 +14,7 @@ import { routeExecution } from "../router/route";
 import type { ReceiptStore } from "../reputation/store";
 import type { ProviderDirectory, ProviderRecord } from "../directory/types";
 import type { NegotiationContext, IdentityContext } from "../policy/context";
-import { fetchQuote, fetchCommit, fetchReveal, fetchStreamChunk } from "../adapters/http/client";
+import { fetchQuote, fetchCommit, fetchReveal, fetchStreamChunk, fetchCredential } from "../adapters/http/client";
 import { verifyEnvelope, parseEnvelope } from "../protocol/envelope";
 import type { SettlementMode, CommitMessage, RevealMessage } from "../protocol/types";
 import type { SignedEnvelope } from "../protocol/envelope";
@@ -337,6 +337,121 @@ export async function acquire(params: {
       
       // Skip this provider (will result in NO_ELIGIBLE_PROVIDERS if all fail)
       continue;
+    }
+
+    // For HTTP providers, fetch and verify credential before fetching quote
+    if (provider.endpoint) {
+      try {
+        const credentialResponse = await fetchCredential(provider.endpoint, input.intentType);
+        const credentialEnvelope = credentialResponse.envelope;
+        
+        // Verify credential envelope signature
+        const credentialVerified = verifyEnvelope(credentialEnvelope);
+        if (!credentialVerified) {
+          const code = "PROVIDER_CREDENTIAL_INVALID" as DecisionCode;
+          failureCodes.push(code);
+          pushDecision(
+            provider,
+            "identity",
+            false,
+            code,
+            "Credential signature verification failed",
+            explainLevel === "full" ? {
+              reason: "credential_signature_invalid",
+            } : undefined
+          );
+          continue;
+        }
+        
+        // Verify credential signer matches provider pubkey
+        if (credentialEnvelope.signer_public_key_b58 !== providerPubkey) {
+          const code = "PROVIDER_SIGNER_MISMATCH" as DecisionCode;
+          failureCodes.push(code);
+          pushDecision(
+            provider,
+            "identity",
+            false,
+            code,
+            "Credential signer does not match provider pubkey",
+            explainLevel === "full" ? {
+              reason: "credential_signer_mismatch",
+              expected: providerPubkey,
+              actual: credentialEnvelope.signer_public_key_b58,
+            } : undefined
+          );
+          continue;
+        }
+        
+        // Parse credential message
+        const credentialMsg = credentialEnvelope.message as any;
+        
+        // Verify credential is not expired
+        const now = nowFunction();
+        if (credentialMsg.expires_at_ms && credentialMsg.expires_at_ms < now) {
+          const code = "PROVIDER_CREDENTIAL_INVALID" as DecisionCode;
+          failureCodes.push(code);
+          pushDecision(
+            provider,
+            "identity",
+            false,
+            code,
+            "Credential expired",
+            explainLevel === "full" ? {
+              reason: "credential_expired",
+              expires_at_ms: credentialMsg.expires_at_ms,
+              now,
+            } : undefined
+          );
+          continue;
+        }
+        
+        // Verify credential supports requested intent type
+        const capabilities = credentialMsg.capabilities || [];
+        const supportsIntent = capabilities.some((cap: any) => cap.intentType === input.intentType);
+        if (!supportsIntent && capabilities.length > 0) {
+          const code = "PROVIDER_CREDENTIAL_INVALID" as DecisionCode;
+          failureCodes.push(code);
+          pushDecision(
+            provider,
+            "identity",
+            false,
+            code,
+            `Credential does not support intent type: ${input.intentType}`,
+            explainLevel === "full" ? {
+              reason: "credential_intent_not_supported",
+              requested: input.intentType,
+              available: capabilities.map((cap: any) => cap.intentType),
+            } : undefined
+          );
+          continue;
+        }
+        
+        // Credential verified successfully (no decision log entry for success, only failures)
+      } catch (error: any) {
+        // Credential fetch failed (provider may not support credential endpoint)
+        // For v1.5, we allow graceful degradation: if credential endpoint doesn't exist (404),
+        // continue without credential verification (backward compatibility)
+        if (error.message?.includes("404") || error.message?.includes("Not found")) {
+          // Credential endpoint not found - allow legacy providers (backward compatibility)
+          // Don't log decision for 404 (graceful degradation)
+        } else {
+          // Other errors (network, parse) - reject provider
+          const code = "PROVIDER_CREDENTIAL_INVALID" as DecisionCode;
+          failureCodes.push(code);
+          pushDecision(
+            provider,
+            "identity",
+            false,
+            code,
+            `Credential fetch failed: ${error.message}`,
+            explainLevel === "full" ? {
+              reason: "credential_fetch_error",
+              error: error.message,
+            } : undefined
+          );
+          continue; // Skip provider if credential fetch fails (except 404)
+        }
+      }
     }
 
     // Generate or fetch quote price
