@@ -47,8 +47,8 @@ describe("transcript", () => {
 
       const filepath = await store.writeTranscript("test-intent-123", transcript);
       
-      // Filename should include timestamp for uniqueness
-      expect(filepath).toMatch(/test-intent-123_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.json$/);
+      // Filename should include timestamp_ms and random suffix for uniqueness
+      expect(filepath).toMatch(/test-intent-123-\d+-[a-f0-9]{6}\.json$/);
       expect(fs.existsSync(filepath)).toBe(true);
       
       const content = fs.readFileSync(filepath, "utf-8");
@@ -82,8 +82,8 @@ describe("transcript", () => {
       
       expect(fs.existsSync(customDir)).toBe(true);
       expect(fs.existsSync(filepath)).toBe(true);
-      // Filename should include timestamp
-      expect(filepath).toMatch(/test-456_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.json$/);
+      // Filename should include timestamp_ms and random suffix
+      expect(filepath).toMatch(/test-456-\d+-[a-f0-9]{6}\.json$/);
     });
 
     it("sanitizes intent_id for filename", async () => {
@@ -107,8 +107,8 @@ describe("transcript", () => {
 
       const filepath = await store.writeTranscript("test/intent:with-invalid-chars", transcript);
       
-      // Should sanitize invalid chars and include timestamp
-      expect(filepath).toMatch(/test_intent_with-invalid-chars_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.json$/);
+      // Should sanitize invalid chars and include timestamp_ms and random suffix
+      expect(filepath).toMatch(/test_intent_with-invalid-chars-\d+-[a-f0-9]{6}\.json$/);
       expect(fs.existsSync(filepath)).toBe(true);
     });
 

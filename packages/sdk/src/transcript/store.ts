@@ -6,13 +6,57 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import * as crypto from "crypto";
+
+/**
+ * Find repository root by walking up from current directory
+ * looking for package.json or .git directory.
+ */
+function findRepoRoot(startDir: string = process.cwd()): string {
+  let current = path.resolve(startDir);
+  const root = path.parse(current).root; // Get filesystem root (e.g., "/" or "C:\")
+  
+  while (current !== root) {
+    // Check for repo root markers
+    const hasPackageJson = fs.existsSync(path.join(current, "package.json"));
+    const hasGit = fs.existsSync(path.join(current, ".git"));
+    const hasPnpmWorkspace = fs.existsSync(path.join(current, "pnpm-workspace.yaml"));
+    
+    if (hasPackageJson && (hasGit || hasPnpmWorkspace)) {
+      return current;
+    }
+    
+    const parent = path.dirname(current);
+    if (parent === current) break; // Reached root
+    current = parent;
+  }
+  
+  // Fallback to startDir if repo root not found
+  return startDir;
+}
 
 export class TranscriptStore {
   private baseDir: string;
 
   constructor(baseDir?: string) {
     // Check for PACT_TRANSCRIPT_DIR env var first, then use provided baseDir, then default
-    this.baseDir = baseDir || process.env.PACT_TRANSCRIPT_DIR || path.join(process.cwd(), ".pact", "transcripts");
+    const envDir = process.env.PACT_TRANSCRIPT_DIR;
+    const dir = baseDir || envDir || ".pact/transcripts";
+    
+    // If relative path, resolve against repo root (not process.cwd())
+    if (!path.isAbsolute(dir)) {
+      const repoRoot = findRepoRoot();
+      this.baseDir = path.resolve(repoRoot, dir);
+    } else {
+      this.baseDir = dir;
+    }
+  }
+
+  /**
+   * Generate a random 6-character hex string for filename uniqueness.
+   */
+  private generateRandomSuffix(): string {
+    return crypto.randomBytes(3).toString("hex");
   }
 
   /**
@@ -37,12 +81,13 @@ export class TranscriptStore {
     // Sanitize intentId for filename (remove invalid chars)
     const sanitizedId = intentId.replace(/[^a-zA-Z0-9_-]/g, "_");
     
-    // Include timestamp in filename for uniqueness
+    // Include timestamp_ms in filename for uniqueness
     // Use transcript.timestamp_ms if available, otherwise use current time
     const timestamp = transcript?.timestamp_ms || Date.now();
-    const timestampStr = new Date(timestamp).toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, -5); // Format: 2024-01-15_14-30-45
     
-    const filename = `${sanitizedId}_${timestampStr}.json`;
+    // Add random suffix to ensure uniqueness even when timestamp is constant
+    const rand6 = this.generateRandomSuffix();
+    const filename = `${sanitizedId}-${timestamp}-${rand6}.json`;
     const filepath = path.join(targetDir, filename);
     
     // Write pretty JSON
