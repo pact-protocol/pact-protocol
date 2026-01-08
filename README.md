@@ -93,6 +93,8 @@ The `acquire()` API can optionally return **explanations**, describing:
 - Why a winner was selected
 - Which constraints or policies applied
 
+Additionally, `acquire()` can save **transcripts** (v1.5.4+) — complete JSON audit trails of each acquisition, including directory, credential checks, quotes, selection, settlement, and receipt. Enable with `saveTranscript: true`.
+
 This is critical for debugging, auditing, and governance.
 
 ### Error Codes (Handling Failures)

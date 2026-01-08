@@ -16,12 +16,12 @@
     "provider:serve:demo": "PACT_DEV_IDENTITY_SEED=pact-provider-default-seed-v1 pnpm -C packages/provider-adapter start",
     "provider:register": "pnpm -C packages/provider-adapter registry:register",
     "provider:list": "pnpm -C packages/provider-adapter registry:list",
-    "demo:buy": "pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse",
-    "demo:happy": "pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo happy",
-    "demo:price-too-high": "pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo price-too-high",
-    "demo:timeout": "pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo timeout",
-    "demo:bad-reveal": "pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo bad-reveal",
-    "demo:streaming": "pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --mode streaming"
+    "demo:buy": "PACT_TRANSCRIPT_DIR=.pact/transcripts pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse",
+    "demo:happy": "PACT_TRANSCRIPT_DIR=.pact/transcripts pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo happy",
+    "demo:price-too-high": "PACT_TRANSCRIPT_DIR=.pact/transcripts pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo price-too-high",
+    "demo:timeout": "PACT_TRANSCRIPT_DIR=.pact/transcripts pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo timeout",
+    "demo:bad-reveal": "PACT_TRANSCRIPT_DIR=.pact/transcripts pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo bad-reveal",
+    "demo:streaming": "PACT_TRANSCRIPT_DIR=.pact/transcripts pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --mode streaming"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",

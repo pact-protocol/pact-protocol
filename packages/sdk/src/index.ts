@@ -47,3 +47,7 @@ export * from "./adapters/http/index";
 
 // KYA (Know Your Agent)
 export * from "./kya/index";
+
+// Transcript (v1.5.4+)
+export * from "./transcript/types";
+export { TranscriptStore } from "./transcript/store";

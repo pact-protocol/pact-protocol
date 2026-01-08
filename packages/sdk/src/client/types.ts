@@ -12,6 +12,9 @@ export type AcquireInput = {
   explain?: "none" | "coarse" | "full";
   // Optional reputation scoring version (v1.5.3+)
   useReputationV2?: boolean; // Use credential-aware, volume-weighted reputation scoring
+  // Optional transcript saving (v1.5.4+)
+  saveTranscript?: boolean; // Save full transcript for audit/debug
+  transcriptDir?: string; // Custom directory for transcripts (default: .pact/transcripts)
   // Optional identity/verification (v1: for policy enforcement)
   identity?: {
     buyer?: {
@@ -65,5 +68,7 @@ export type AcquireResult = {
   offers_eligible?: number;
   // Optional explain metadata (even on failure)
   explain?: import("./explain").AcquireExplain;
+  // Optional transcript path (v1.5.4+)
+  transcriptPath?: string;
 };
 

@@ -7,6 +7,7 @@ coverage/
 
 # Local artifacts
 packages/demo/demo_receipts.jsonl
+.pact/transcripts/
 
 # Backup and temp files
 *.backup

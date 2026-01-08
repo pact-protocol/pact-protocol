@@ -19,6 +19,8 @@ import { fetchQuote, fetchCommit, fetchReveal, fetchStreamChunk, fetchCredential
 import { verifyEnvelope, parseEnvelope } from "../protocol/envelope";
 import type { SettlementMode, CommitMessage, RevealMessage } from "../protocol/types";
 import type { SignedEnvelope } from "../protocol/envelope";
+import type { TranscriptV1 } from "../transcript/types";
+import { TranscriptStore } from "../transcript/store";
 
 const round8 = (x: number) => Math.round(x * 1e8) / 1e8;
 
@@ -52,6 +54,19 @@ export async function acquire(params: {
     providers_considered: 0,
     providers_eligible: 0,
     log: [],
+  } : null;
+
+  // Initialize transcript collection if requested
+  const saveTranscript = input.saveTranscript ?? false;
+  const transcriptData: Partial<TranscriptV1> | null = saveTranscript ? {
+    version: "1",
+    intent_type: input.intentType,
+    timestamp_ms: nowFn ? nowFn() : Date.now(),
+    input: { ...input }, // Sanitized copy (can remove sensitive data if needed)
+    directory: [],
+    credential_checks: [],
+    quotes: [],
+    outcome: { ok: false },
   } : null;
   
   // Helper to push decision to explain log
@@ -200,6 +215,17 @@ export async function acquire(params: {
         baseline_latency_ms: provider.baseline_latency_ms,
         endpoint: provider.endpoint,
       };
+      
+      // Collect directory data for transcript
+      if (transcriptData) {
+        transcriptData.directory!.push({
+          provider_id: record.provider_id,
+          pubkey_b58: candidate.pubkey_b58,
+          endpoint: candidate.endpoint,
+          region: candidate.region,
+          credentials: candidate.credentials,
+        });
+      }
       
       // Log directory step (provider found) - don't use PROVIDER_SELECTED here, that's only for the winner
       // Just track that we found the provider (no decision code needed for positive directory lookup)
@@ -366,6 +392,16 @@ export async function acquire(params: {
               reason: "credential_signature_invalid",
             } : undefined
           );
+          // Collect credential check for transcript
+          if (transcriptData) {
+            transcriptData.credential_checks!.push({
+              provider_id: provider.provider_id,
+              pubkey_b58: providerPubkey,
+              ok: false,
+              code: "PROVIDER_CREDENTIAL_INVALID",
+              reason: "Credential signature verification failed",
+            });
+          }
           continue;
         }
         
@@ -443,6 +479,20 @@ export async function acquire(params: {
           };
         }
         
+        // Collect successful credential check for transcript
+        if (transcriptData) {
+          transcriptData.credential_checks!.push({
+            provider_id: provider.provider_id,
+            pubkey_b58: providerPubkey,
+            ok: true,
+            credential_summary: {
+              signer_public_key_b58: credentialEnvelope.signer_public_key_b58,
+              expires_at_ms: credentialMsg.expires_at_ms,
+              capabilities: capabilities,
+            },
+          });
+        }
+        
         // Credential verified successfully (no decision log entry for success, only failures)
       } catch (error: any) {
         // Credential fetch failed (provider may not support credential endpoint)
@@ -499,6 +549,16 @@ export async function acquire(params: {
             code,
             "Quote envelope signature verification failed"
           );
+          // Collect failed quote for transcript
+          if (transcriptData) {
+            transcriptData.quotes!.push({
+              provider_id: provider.provider_id,
+              pubkey_b58: providerPubkey,
+              ok: false,
+              code: "PROVIDER_SIGNATURE_INVALID",
+              reason: "Quote envelope signature verification failed",
+            });
+          }
           continue;
         }
         
@@ -555,6 +615,23 @@ export async function acquire(params: {
         
         // Store the verified envelope for later use
         (provider as any)._verifiedAskEnvelope = quoteResponse.envelope;
+        
+        // Collect successful quote for transcript
+        if (transcriptData) {
+          transcriptData.quotes!.push({
+            provider_id: provider.provider_id,
+            pubkey_b58: providerPubkey,
+            ok: true,
+            signer_pubkey_b58: parsed.signer_public_key_b58,
+            quote_summary: {
+              quote_price: askPrice,
+              reference_price_p50: referenceP50,
+              valid_for_ms: parsed.message.valid_for_ms,
+              is_firm_quote: (parsed.message as any).is_firm_quote,
+              urgent: (parsed.message as any).urgent,
+            },
+          });
+        }
       } catch (error: any) {
         // HTTP provider failed, skip this provider
         const code = "PROVIDER_QUOTE_HTTP_ERROR" as DecisionCode;
@@ -578,6 +655,22 @@ export async function acquire(params: {
       const basePrice = Math.min(input.maxPrice * 0.8, input.maxPrice);
       askPrice = basePrice * (1 - priceVariation);
       latencyMs = provider.baseline_latency_ms ?? input.constraints.latency_ms;
+      
+      // Collect local quote for transcript
+      if (transcriptData) {
+        transcriptData.quotes!.push({
+          provider_id: provider.provider_id,
+          pubkey_b58: providerPubkey,
+          ok: true,
+          quote_summary: {
+            quote_price: askPrice,
+            reference_price_p50: referenceP50,
+            valid_for_ms: 20000,
+            is_firm_quote: true,
+            urgent: input.urgent,
+          },
+        });
+      }
     }
 
     // Build negotiation context (same shape as policy vectors)
@@ -695,6 +788,23 @@ export async function acquire(params: {
         ts_ms: nowFunction(),
       });
     }
+    // Build and write transcript for error case
+    let transcriptPath: string | undefined;
+    if (saveTranscript && transcriptData) {
+      // Generate intent_id for error case
+      const errorIntentId = `error-${nowFunction()}`;
+      transcriptData.intent_id = errorIntentId;
+      transcriptData.explain = explain || undefined;
+      transcriptData.outcome = {
+        ok: false,
+        code: finalCode,
+        reason: finalCode === "UNTRUSTED_ISSUER" ? "All providers failed trusted issuer validation" : "No eligible providers",
+      };
+      
+      const transcriptStore = new TranscriptStore(input.transcriptDir);
+      transcriptPath = await transcriptStore.writeTranscript(errorIntentId, transcriptData as TranscriptV1);
+    }
+    
     const errorResult: AcquireResult = {
       ok: false,
       plan: {
@@ -706,6 +816,7 @@ export async function acquire(params: {
       reason: finalCode === "UNTRUSTED_ISSUER" ? "All providers failed trusted issuer validation" : "No eligible providers",
       offers_eligible: 0,
       ...(explain ? { explain } : {}),
+      ...(transcriptPath ? { transcriptPath } : {}),
     };
     return errorResult;
   }
@@ -714,6 +825,17 @@ export async function acquire(params: {
   const bestQuote = evaluations[0];
   const selectedProvider = bestQuote.provider;
   const selectedProviderPubkey = bestQuote.providerPubkey;
+  
+  // Collect selection for transcript
+  if (transcriptData) {
+    transcriptData.selection = {
+      selected_provider_id: selectedProvider.provider_id,
+      selected_pubkey_b58: selectedProviderPubkey,
+      reason: "Lowest utility score",
+      utility_score: bestQuote.utility,
+      alternatives_considered: evaluations.length,
+    };
+  }
   const selectedAskPrice = bestQuote.askPrice;
   
   // Log provider selection
@@ -1601,9 +1723,25 @@ export async function acquire(params: {
     offers_eligible: evaluations.length,
   };
   
+  // Build and write transcript if requested
+  let transcriptPath: string | undefined;
+  if (saveTranscript && transcriptData) {
+    transcriptData.intent_id = intentId;
+    transcriptData.settlement = {
+      mode: chosenMode,
+      verification_summary: verification,
+    };
+    transcriptData.receipt = receipt;
+    transcriptData.explain = explain || undefined;
+    transcriptData.outcome = { ok: true };
+    
+    const transcriptStore = new TranscriptStore(input.transcriptDir);
+    transcriptPath = await transcriptStore.writeTranscript(intentId, transcriptData as TranscriptV1);
+  }
+  
   const finalResult: AcquireResult = explain 
-    ? { ...baseResult, explain, ...(verification ? { verification } : {}) }
-    : { ...baseResult, ...(verification ? { verification } : {}) };
+    ? { ...baseResult, explain, ...(verification ? { verification } : {}), ...(transcriptPath ? { transcriptPath } : {}) }
+    : { ...baseResult, ...(verification ? { verification } : {}), ...(transcriptPath ? { transcriptPath } : {}) };
   return finalResult;
 }
 

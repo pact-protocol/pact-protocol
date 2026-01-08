@@ -209,6 +209,8 @@ async function main() {
   }
   
   // --- Other CLI args ---
+  const saveTranscript = args.saveTranscript || args["save-transcript"] || false;
+  const transcriptDir = args.transcriptDir || args["transcript-dir"];
   const rawIntent = args.intent;
   const intentType = Array.isArray(rawIntent) 
     ? rawIntent[rawIntent.length - 1] 
@@ -529,6 +531,8 @@ async function main() {
       buyerStopAfterTicks: buyerStopAfter,
       explain: explainLevel,
       useReputationV2: true, // Enable credential-aware, volume-weighted reputation (v1.5.3+)
+      saveTranscript: saveTranscript || isDemoMode, // Enable transcripts for demo modes (v1.5.4+)
+      transcriptDir: transcriptDir,
     },
     buyerKeyPair,
     sellerKeyPair,
@@ -546,6 +550,11 @@ async function main() {
     now: nowFn,
   });
   
+  // Print transcript path if saved
+  if (result.transcriptPath) {
+    console.log(`\n✅ Transcript saved: ${result.transcriptPath}`);
+  }
+  
   if (!result.ok) {
     printSection("Acquire Failed");
     console.error(`Code: ${result.code}`);
@@ -559,6 +568,11 @@ async function main() {
           console.error(`  [${log.step}] ${log.provider_id?.slice(0, 10) || "N/A"}: ${log.code} - ${log.reason}`);
         });
       }
+    }
+    
+    // Print transcript path if saved (even on failure)
+    if (result.transcriptPath) {
+      console.error(`\n✅ Transcript saved: ${result.transcriptPath}`);
     }
     
     // Show balances even on failure
