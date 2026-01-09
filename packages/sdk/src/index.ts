@@ -16,6 +16,7 @@ export * from "./policy/defaultPolicy";
 export * from "./engine/index";
 
 // Settlement
+export * from "./settlement/types";
 export * from "./settlement/provider";
 export * from "./settlement/mock";
 export * from "./settlement/external";

@@ -35,6 +35,7 @@
  */
 
 import type { SettlementProvider } from "./provider";
+import type { SettlementIntent, SettlementHandle, SettlementResult } from "./types";
 
 export interface ExternalSettlementProviderConfig {
   rail: string; // e.g., "stripe", "ethereum", "solana", "custodial"
@@ -123,6 +124,28 @@ export class ExternalSettlementProvider implements SettlementProvider {
     } catch {
       return false;
     }
+  }
+
+  // ============================================================================
+  // Settlement Lifecycle API (v1.6.1+)
+  // ============================================================================
+
+  async prepare(intent: SettlementIntent): Promise<SettlementHandle> {
+    throw new Error(
+      `${this.errorMessage}: prepare() - Real implementations should integrate with ${this.config.rail} payment rail`
+    );
+  }
+
+  async commit(handle_id: string): Promise<SettlementResult> {
+    throw new Error(
+      `${this.errorMessage}: commit() - Real implementations should integrate with ${this.config.rail} payment rail`
+    );
+  }
+
+  async abort(handle_id: string, reason?: string): Promise<void> {
+    throw new Error(
+      `${this.errorMessage}: abort() - Real implementations should integrate with ${this.config.rail} payment rail`
+    );
   }
 }
 

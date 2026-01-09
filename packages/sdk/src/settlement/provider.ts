@@ -15,6 +15,9 @@
  * - Insufficient balance should return false (for lock operations) or throw Error (for pay/slash)
  * - External providers may throw network/API errors
  */
+
+import type { SettlementIntent, SettlementHandle, SettlementResult } from "./types";
+
 export interface SettlementProvider {
   /**
    * Get available (unlocked) balance for an agent.
@@ -170,6 +173,67 @@ export interface SettlementProvider {
    * Note: This is equivalent to pay(buyerId, sellerId, amount) but kept for clarity.
    */
   streamTick(buyerId: string, sellerId: string, amount: number): boolean;
+
+  // ============================================================================
+  // Settlement Lifecycle API (v1.6.1+)
+  // ============================================================================
+
+  /**
+   * Prepare settlement by locking funds.
+   * Creates a settlement handle for idempotent settlement operations.
+   * 
+   * @param intent Settlement intent with idempotency_key
+   * @returns Settlement handle with handle_id and status "prepared"
+   * @throws Error if amount < 0 or if insufficient balance
+   * 
+   * Idempotency: If called multiple times with the same (intent_id, idempotency_key),
+   * returns the same handle (no double-locking).
+   * 
+   * Invariants:
+   * - getBalance(from) decreases by amount
+   * - getLocked(from) increases by amount
+   * - Handle status is "prepared"
+   * - handle_id is deterministic (derived from intent_id + idempotency_key)
+   */
+  prepare(intent: SettlementIntent): Promise<SettlementHandle>;
+
+  /**
+   * Commit prepared settlement by transferring locked funds.
+   * Moves locked funds from buyer to seller.
+   * 
+   * @param handle_id Settlement handle identifier
+   * @returns Settlement result with status "committed" and paid_amount
+   * @throws Error if handle not found or if handle is not in "prepared" status
+   * 
+   * Idempotency: If called multiple times with the same handle_id,
+   * returns the same result (no double-payment).
+   * 
+   * Invariants:
+   * - getLocked(from) decreases by amount
+   * - getBalance(to) increases by amount
+   * - Handle status changes from "prepared" to "committed"
+   */
+  commit(handle_id: string): Promise<SettlementResult>;
+
+  /**
+   * Abort prepared settlement by releasing locked funds.
+   * Releases locked funds back to buyer's available balance.
+   * 
+   * @param handle_id Settlement handle identifier
+   * @param reason Optional reason for abort
+   * @returns void (resolves on success)
+   * @throws Error if handle not found
+   * 
+   * Idempotency: If called multiple times with the same handle_id,
+   * returns successfully (idempotent abort is safe).
+   * 
+   * Invariants:
+   * - getLocked(from) decreases by amount
+   * - getBalance(from) increases by amount
+   * - Handle status changes to "aborted"
+   * - Safe to call multiple times (idempotent)
+   */
+  abort(handle_id: string, reason?: string): Promise<void>;
 }
 
 
