@@ -20,6 +20,7 @@ export * from "./settlement/types";
 export * from "./settlement/provider";
 export * from "./settlement/mock";
 export * from "./settlement/external";
+export * from "./settlement/factory";
 
 // Exchange
 export * from "./exchange/receipt";

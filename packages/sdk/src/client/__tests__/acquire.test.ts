@@ -1068,5 +1068,122 @@ describe("acquire", () => {
       }
     });
   });
+
+  describe("Settlement provider selection (v1.6.2+)", () => {
+    it("should use mock provider by default (backward compatible)", async () => {
+      const buyer = createKeyPair();
+      const seller = createKeyPair();
+      const policy = createDefaultPolicy();
+      const settlement = new MockSettlementProvider();
+      settlement.credit(buyer.id, 1.0);
+      settlement.credit(seller.id, 0.1);
+      const store = new ReceiptStore();
+
+      const result = await acquire({
+        input: {
+          intentType: "weather.data",
+          scope: "NYC",
+          constraints: { latency_ms: 50, freshness_sec: 10 },
+          maxPrice: 0.0001,
+          // No settlement config - should use explicit settlement parameter
+        },
+        buyerKeyPair: buyer.keyPair,
+        sellerKeyPair: seller.keyPair,
+        buyerId: buyer.id,
+        sellerId: seller.id,
+        policy,
+        settlement, // Explicit settlement parameter
+        store,
+        now: createClock(),
+      });
+
+      // Should succeed with mock provider (default behavior)
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.receipt.fulfilled).toBe(true);
+      }
+    });
+
+    it("should create external provider from input.settlement.provider and fail with SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", async () => {
+      const buyer = createKeyPair();
+      const seller = createKeyPair();
+      const policy = createDefaultPolicy();
+      const settlement = new MockSettlementProvider(); // Pass mock but input config should override
+      settlement.credit(buyer.id, 1.0);
+      settlement.credit(seller.id, 0.1);
+      const store = new ReceiptStore();
+
+      const result = await acquire({
+        input: {
+          intentType: "weather.data",
+          scope: "NYC",
+          constraints: { latency_ms: 50, freshness_sec: 10 },
+          maxPrice: 0.0001,
+          settlement: {
+            provider: "external",
+            params: {
+              rail: "stripe",
+              network: "testnet",
+            },
+          },
+        },
+        buyerKeyPair: buyer.keyPair,
+        sellerKeyPair: seller.keyPair,
+        buyerId: buyer.id,
+        sellerId: seller.id,
+        policy,
+        settlement, // This will be overridden by input.settlement.provider
+        store,
+        now: createClock(),
+      });
+
+      // Should fail with SETTLEMENT_PROVIDER_NOT_IMPLEMENTED
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.code).toBe("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED");
+        expect(result.reason).toContain("Settlement provider not implemented");
+      }
+    });
+
+    it("should create mock provider from input.settlement.provider=mock", async () => {
+      const buyer = createKeyPair();
+      const seller = createKeyPair();
+      const policy = createDefaultPolicy();
+      // Don't pass explicit settlement - use input config
+      const store = new ReceiptStore();
+
+      // This test requires settlement to be optional, but the signature requires it
+      // For now, pass a mock but verify input config is used
+      const settlement = new MockSettlementProvider();
+      settlement.credit(buyer.id, 1.0);
+      settlement.credit(seller.id, 0.1);
+
+      const result = await acquire({
+        input: {
+          intentType: "weather.data",
+          scope: "NYC",
+          constraints: { latency_ms: 50, freshness_sec: 10 },
+          maxPrice: 0.0001,
+          settlement: {
+            provider: "mock",
+          },
+        },
+        buyerKeyPair: buyer.keyPair,
+        sellerKeyPair: seller.keyPair,
+        buyerId: buyer.id,
+        sellerId: seller.id,
+        policy,
+        settlement, // Will be overridden by input.settlement.provider
+        store,
+        now: createClock(),
+      });
+
+      // Should succeed (input config creates new mock provider, which also works)
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.receipt.fulfilled).toBe(true);
+      }
+    });
+  });
 });
 

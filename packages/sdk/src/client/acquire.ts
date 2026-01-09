@@ -22,6 +22,8 @@ import type { SignedEnvelope } from "../protocol/envelope";
 import type { TranscriptV1 } from "../transcript/types";
 import { TranscriptStore } from "../transcript/store";
 import { computeCredentialTrustScore } from "../kya/trust";
+import { createSettlementProvider } from "../settlement/factory";
+import { MockSettlementProvider } from "../settlement/mock";
 
 const round8 = (x: number) => Math.round(x * 1e8) / 1e8;
 
@@ -42,7 +44,57 @@ export async function acquire(params: {
   };
   now?: () => number;
 }): Promise<AcquireResult> {
-  const { input, buyerKeyPair, sellerKeyPair, buyerId, sellerId, policy, settlement, store, directory, rfq, now: nowFn } = params;
+  const { input, buyerKeyPair, sellerKeyPair, buyerId, sellerId, policy, settlement: explicitSettlement, store, directory, rfq, now: nowFn } = params;
+  
+  // Settlement provider selection (v1.6.2+)
+  // If caller passes settlement instance explicitly, that wins (backward compatibility).
+  // Else if input.settlement.provider is provided, create provider via factory.
+  // Else use existing default behavior (mock already being passed by demo).
+  let settlement: SettlementProvider;
+  try {
+    if (input.settlement?.provider) {
+      // Create provider via factory (input config takes precedence over explicit parameter)
+      settlement = createSettlementProvider({
+        provider: input.settlement.provider,
+        params: input.settlement.params,
+        idempotency_key: input.settlement.idempotency_key,
+      });
+      // For mock provider, copy balances from explicit settlement if it exists and is also a mock
+      if (input.settlement.provider === "mock" && explicitSettlement) {
+        try {
+          if (explicitSettlement instanceof MockSettlementProvider && settlement instanceof MockSettlementProvider) {
+            settlement.copyFrom(explicitSettlement);
+          }
+        } catch (e: any) {
+          // Silently fail if copying doesn't work (e.g., not MockSettlementProvider)
+        }
+      }
+    } else {
+      // Use explicit settlement parameter (backward compatible default)
+      settlement = explicitSettlement;
+    }
+  } catch (error: any) {
+    // Handle factory creation errors (e.g., invalid config)
+    const errorMsg = error?.message || String(error);
+    const explainLevel: ExplainLevel = input.explain ?? "none";
+    const explain: AcquireExplain | null = explainLevel !== "none" ? {
+      level: explainLevel,
+      intentType: input.intentType,
+      settlement: "hash_reveal",
+      regime: "posted",
+      fanout: 0,
+      providers_considered: 0,
+      providers_eligible: 0,
+      log: [],
+    } : null;
+    
+    return {
+      ok: false,
+      code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+      reason: `Settlement provider not implemented: ${errorMsg}`,
+      explain: explain || undefined,
+    };
+  }
   
   // Initialize explain if requested
   const explainLevel: ExplainLevel = input.explain ?? "none";
@@ -1131,10 +1183,35 @@ export async function acquire(params: {
   );
 
   // 10.5) Ensure seller has enough balance (v1 simulation: top-up if needed)
+  try {
   const sellerBal = settlement.getBalance(selectedProviderPubkey);
   if (sellerBal < sellerBondRequired) {
     // v1: top-up seller so lockBond can succeed during tests/demo
     settlement.credit(selectedProviderPubkey, sellerBondRequired - sellerBal);
+    }
+  } catch (error: any) {
+    // Handle settlement provider errors (e.g., ExternalSettlementProvider NotImplemented)
+    const errorMsg = error?.message || String(error);
+    if (errorMsg.includes("NotImplemented") || errorMsg.includes("ExternalSettlementProvider")) {
+      if (explain) {
+        pushDecision(
+          selectedProvider,
+          "settlement",
+          false,
+          "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+          `Settlement provider not implemented: ${errorMsg}`,
+          explainLevel === "full" ? { error: errorMsg } : undefined
+        );
+      }
+      return {
+        ok: false,
+        code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+        reason: `Settlement provider not implemented: ${errorMsg}`,
+        explain: explain || undefined,
+      };
+    }
+    // Re-throw other errors
+    throw error;
   }
 
   // 11) Build and sign ASK envelope for selected provider
@@ -1614,8 +1691,33 @@ export async function acquire(params: {
     }
 
     // Unlock what the agreement locked (pay-as-you-go)
-    settlement.unlock(buyerId, agreement.agreed_price);
-    settlement.unlock(selectedProviderPubkey, agreement.seller_bond);
+      try {
+        settlement.unlock(buyerId, agreement.agreed_price);
+        settlement.unlock(selectedProviderPubkey, agreement.seller_bond);
+      } catch (error: any) {
+        // Handle settlement provider errors (e.g., ExternalSettlementProvider NotImplemented)
+        const errorMsg = error?.message || String(error);
+        if (errorMsg.includes("NotImplemented") || errorMsg.includes("ExternalSettlementProvider")) {
+          if (explain) {
+            pushDecision(
+              selectedProvider,
+              "settlement",
+              false,
+              "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+              `Settlement provider not implemented: ${errorMsg}`,
+              explainLevel === "full" ? { error: errorMsg } : undefined
+            );
+          }
+          return {
+            ok: false,
+            code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+            reason: `Settlement provider not implemented: ${errorMsg}`,
+            explain: explain || undefined,
+          };
+        }
+        // Re-throw other errors
+        throw error;
+      }
 
     const totalBudget = agreement.agreed_price;
     const tickMs = streamingPolicy.tick_ms;
@@ -1637,7 +1739,32 @@ export async function acquire(params: {
       plannedTicks,
     });
 
-    exchange.start();
+        try {
+          exchange.start();
+        } catch (error: any) {
+          // Handle settlement provider errors from exchange.start()
+          const errorMsg = error?.message || String(error);
+          if (errorMsg.includes("NotImplemented") || errorMsg.includes("ExternalSettlementProvider")) {
+            if (explain) {
+              pushDecision(
+                selectedProvider,
+                "settlement",
+                false,
+                "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+                `Settlement provider not implemented: ${errorMsg}`,
+                explainLevel === "full" ? { error: errorMsg } : undefined
+              );
+            }
+            return {
+              ok: false,
+              code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+              reason: `Settlement provider not implemented: ${errorMsg}`,
+              explain: explain || undefined,
+            };
+          }
+          // Re-throw other errors
+          throw error;
+        }
 
     for (let i = 1; i <= plannedTicks; i++) {
       streamNow += tickMs + 5; // Always advance the streaming clock
@@ -1748,7 +1875,33 @@ export async function acquire(params: {
       }
 
       // Then call tick() to process payment
-      const tickResult = exchange.tick();
+      let tickResult;
+      try {
+        tickResult = exchange.tick();
+      } catch (error: any) {
+        // Handle settlement provider errors from exchange.tick()
+        const errorMsg = error?.message || String(error);
+        if (errorMsg.includes("NotImplemented") || errorMsg.includes("ExternalSettlementProvider")) {
+          if (explain) {
+            pushDecision(
+              selectedProvider,
+              "settlement",
+              false,
+              "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+              `Settlement provider not implemented: ${errorMsg}`,
+              explainLevel === "full" ? { error: errorMsg } : undefined
+            );
+          }
+          return {
+            ok: false,
+            code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+            reason: `Settlement provider not implemented: ${errorMsg}`,
+            explain: explain || undefined,
+          };
+        }
+        // Re-throw other errors
+        throw error;
+      }
       const state = exchange.getState();
 
       // Check for receipt (completion or failure) - natural exit

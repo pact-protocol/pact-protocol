@@ -19,6 +19,12 @@ export type AcquireInput = {
   minTrustTier?: "untrusted" | "low" | "trusted"; // Override policy min_trust_tier
   minTrustScore?: number; // Override policy min_trust_score
   requireCredential?: boolean; // Override policy require_credential
+  // Optional settlement provider selection (v1.6.2+)
+  settlement?: {
+    provider?: "mock" | "external";
+    params?: Record<string, unknown>; // Parameters for external provider (e.g., { rail: "stripe", network: "testnet" })
+    idempotency_key?: string; // Optional idempotency key for settlement lifecycle
+  };
   // Optional identity/verification (v1: for policy enforcement)
   identity?: {
     buyer?: {

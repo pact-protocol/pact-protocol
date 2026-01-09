@@ -25,6 +25,7 @@ export type DecisionCode =
   | "SETTLEMENT_STARTED"
   | "SETTLEMENT_COMPLETED"
   | "SETTLEMENT_FAILED"
+  | "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED"
   | "RECEIPT_INGESTED";
 
 export type ProviderDecision = {

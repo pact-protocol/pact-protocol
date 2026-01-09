@@ -31,6 +31,23 @@ export class MockSettlementProvider implements SettlementProvider {
     return { balance: a.balance, locked: a.locked };
   }
 
+  /**
+   * Copy account balances from another MockSettlementProvider.
+   * Used when creating a new mock provider via factory but preserving existing balances.
+   * @param other Another MockSettlementProvider instance
+   */
+  copyFrom(other: MockSettlementProvider): void {
+    // Use type assertion to access private accounts (both are MockSettlementProvider)
+    const otherAccounts = (other as any).accounts as Map<string, Account>;
+    if (otherAccounts) {
+      for (const [agentId, account] of otherAccounts.entries()) {
+        const a = this.acct(agentId);
+        a.balance = account.balance;
+        a.locked = account.locked;
+      }
+    }
+  }
+
   // --- core interface ---
   getBalance(agentId: string): number {
     return this.acct(agentId).balance;
