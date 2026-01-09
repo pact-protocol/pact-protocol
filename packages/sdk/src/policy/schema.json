@@ -49,12 +49,15 @@
                 "additionalProperties": false,
                 "required": [
                   "require_trusted_issuer",
+                  "require_credential",
                   "trusted_issuers",
                   "issuer_weights",
+                  "min_trust_tier",
                   "min_trust_score"
                 ],
                 "properties": {
                   "require_trusted_issuer": { "type": "boolean" },
+                  "require_credential": { "type": "boolean" },
                   "trusted_issuers": {
                     "type": "array",
                     "uniqueItems": true,
@@ -63,6 +66,10 @@
                   "issuer_weights": {
                     "type": "object",
                     "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 }
+                  },
+                  "min_trust_tier": {
+                    "type": "string",
+                    "enum": ["untrusted", "low", "trusted"]
                   },
                   "min_trust_score": { "type": "number", "minimum": 0, "maximum": 1 }
                 }

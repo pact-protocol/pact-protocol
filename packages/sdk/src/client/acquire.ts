@@ -334,6 +334,7 @@ export async function acquire(params: {
     // Track credential verification status for V2 scoring
     let credentialPresent = false;
     let credentialClaims: AgentScoreV2Context["credentialClaims"] = undefined;
+    let trustResult: ReturnType<typeof computeCredentialTrustScore> | null = null;
 
     // Compute initial reputation for identity check (V1, will be recomputed later for utility if V2 enabled)
     let sellerReputation = store ? (() => {
@@ -480,62 +481,27 @@ export async function acquire(params: {
           };
         }
         
-        // Compute trust score
-        const trustConfig = compiled.trustConfig!;
-        const trustResult = computeCredentialTrustScore({
-          credential: {
-            issuer: credentialMsg.issuer || "self",
+        // Compute trust score (only if credential present)
+        const baseTrustConfigForTrust = compiled.trustConfig!;
+        if (credentialPresent) {
+          trustResult = computeCredentialTrustScore({
+            credential: {
+              issuer: credentialMsg.issuer || "self",
+              claims: matchedCapability?.credentials || [],
+              region: matchedCapability?.region || provider.region,
+              modes: matchedCapability?.modes || [],
+            },
             claims: matchedCapability?.credentials || [],
-            region: matchedCapability?.region || provider.region,
-            modes: matchedCapability?.modes || [],
-          },
-          claims: matchedCapability?.credentials || [],
-          requestContext: {
-            region: (input.constraints as any)?.region,
-            settlementMode: chosenMode,
-          },
-          policyTrustConfig: trustConfig,
-        });
-        
-        // Check trust requirements
-        if (trustConfig.require_trusted_issuer && !trustConfig.trusted_issuers.includes(trustResult.issuer)) {
-          const code = "PROVIDER_ISSUER_UNTRUSTED" as DecisionCode;
-          failureCodes.push(code);
-          pushDecision(
-            provider,
-            "identity",
-            false,
-            code,
-            `Issuer "${trustResult.issuer}" not in trusted issuers list`,
-            explainLevel === "full" ? {
-              issuer: trustResult.issuer,
-              trusted_issuers: trustConfig.trusted_issuers,
-            } : undefined
-          );
-          continue;
-        }
-        
-        if (trustResult.trust_score < trustConfig.min_trust_score) {
-          const code = "PROVIDER_CREDENTIAL_LOW_TRUST" as DecisionCode;
-          failureCodes.push(code);
-          pushDecision(
-            provider,
-            "identity",
-            false,
-            code,
-            `Credential trust score ${trustResult.trust_score.toFixed(3)} below minimum ${trustConfig.min_trust_score}`,
-            explainLevel === "full" ? {
-              trust_score: trustResult.trust_score,
-              min_trust_score: trustConfig.min_trust_score,
-              tier: trustResult.tier,
-              reasons: trustResult.reasons,
-            } : undefined
-          );
-          continue;
+            requestContext: {
+              region: (input.constraints as any)?.region,
+              settlementMode: chosenMode,
+            },
+            policyTrustConfig: baseTrustConfigForTrust,
+          });
         }
         
         // Provider eligible - log trust score for full explain
-        if (explainLevel === "full") {
+        if (explainLevel === "full" && credentialPresent && trustResult) {
           pushDecision(
             provider,
             "identity",
@@ -551,11 +517,17 @@ export async function acquire(params: {
           );
         }
         
-        // Store trust score in evaluation context (for selection and reputation)
-        (provider as any)._trustScore = trustResult.trust_score;
+        // Store trust score and tier in evaluation context (for selection and reputation)
+        if (credentialPresent && trustResult) {
+          (provider as any)._trustScore = trustResult.trust_score;
+          (provider as any)._trustTier = trustResult.tier;
+        } else {
+          (provider as any)._trustScore = 0;
+          (provider as any)._trustTier = "untrusted";
+        }
         
         // Collect successful credential check for transcript
-        if (transcriptData) {
+        if (transcriptData && trustResult) {
           transcriptData.credential_checks!.push({
             provider_id: provider.provider_id,
             pubkey_b58: providerPubkey,
@@ -578,6 +550,7 @@ export async function acquire(params: {
         if (error.message?.includes("404") || error.message?.includes("Not found")) {
           // Credential endpoint not found - allow legacy providers (backward compatibility)
           // Don't log decision for 404 (graceful degradation)
+          // credentialPresent remains false
         } else {
           // Other errors (network, parse) - reject provider
           const code = "PROVIDER_CREDENTIAL_INVALID" as DecisionCode;
@@ -596,6 +569,105 @@ export async function acquire(params: {
           continue; // Skip provider if credential fetch fails (except 404)
         }
       }
+    }
+    
+    // Get buyer overrides and merge with policy trust config (after credential verification attempt)
+    const baseTrustConfig = compiled.trustConfig!;
+    const requireCredential = input.requireCredential ?? baseTrustConfig.require_credential;
+    
+    // Check requireCredential (after credential verification attempt, whether success or 404)
+    if (requireCredential && !credentialPresent) {
+      const code = "PROVIDER_CREDENTIAL_REQUIRED" as DecisionCode;
+      failureCodes.push(code);
+      pushDecision(
+        provider,
+        "identity",
+        false,
+        code,
+        "Credential required but provider does not present one",
+        explainLevel === "full" ? {
+          require_credential: requireCredential,
+        } : undefined
+      );
+      continue;
+    }
+    
+    // Get remaining trust config overrides
+    const requireTrustedIssuer = baseTrustConfig.require_trusted_issuer; // Buyer override not provided for this
+    const minTrustTier = input.minTrustTier ?? baseTrustConfig.min_trust_tier;
+    const minTrustScore = input.minTrustScore ?? baseTrustConfig.min_trust_score;
+    
+    // Trust result was computed above if credentialPresent, otherwise it's null
+    // If no credential, trust tier/score checks don't apply (already passed requireCredential check)
+    if (credentialPresent && trustResult) {
+      // 2. Check require_trusted_issuer
+      if (requireTrustedIssuer && !baseTrustConfig.trusted_issuers.includes(trustResult.issuer)) {
+        const code = "PROVIDER_ISSUER_UNTRUSTED" as DecisionCode;
+        failureCodes.push(code);
+        pushDecision(
+          provider,
+          "identity",
+          false,
+          code,
+          `Issuer "${trustResult.issuer}" not in trusted issuers list`,
+          explainLevel === "full" ? {
+            issuer: trustResult.issuer,
+            trusted_issuers: baseTrustConfig.trusted_issuers,
+          } : undefined
+        );
+        continue;
+      }
+      
+      // 3. Check trust tier
+      // Tier ordering: untrusted < low < trusted
+      const tierOrder: Record<"untrusted" | "low" | "trusted", number> = {
+        untrusted: 0,
+        low: 1,
+        trusted: 2,
+      };
+      if (tierOrder[trustResult.tier] < tierOrder[minTrustTier]) {
+        const code = "PROVIDER_TRUST_TIER_TOO_LOW" as DecisionCode;
+        failureCodes.push(code);
+        pushDecision(
+          provider,
+          "identity",
+          false,
+          code,
+          `Trust tier "${trustResult.tier}" below minimum "${minTrustTier}"`,
+          explainLevel === "full" ? {
+            tier: trustResult.tier,
+            min_trust_tier: minTrustTier,
+            trust_score: trustResult.trust_score,
+          } : undefined
+        );
+        continue;
+      }
+      
+      // 4. Check trust score
+      if (trustResult.trust_score < minTrustScore) {
+        const code = "PROVIDER_TRUST_SCORE_TOO_LOW" as DecisionCode;
+        failureCodes.push(code);
+        pushDecision(
+          provider,
+          "identity",
+          false,
+          code,
+          `Credential trust score ${trustResult.trust_score.toFixed(3)} below minimum ${minTrustScore}`,
+          explainLevel === "full" ? {
+            trust_score: trustResult.trust_score,
+            min_trust_score: minTrustScore,
+            tier: trustResult.tier,
+            reasons: trustResult.reasons,
+          } : undefined
+        );
+        continue;
+      }
+    }
+    
+    // Store trust score and tier for routing (even if no credential, default to untrusted/0)
+    if (!credentialPresent || !trustResult) {
+      (provider as any)._trustScore = 0;
+      (provider as any)._trustTier = "untrusted";
     }
 
     // Generate or fetch quote price
@@ -818,10 +890,18 @@ export async function acquire(params: {
 
     // Compute utility score (lower is better)
     // utility = price + 0.00000001 * latency_ms + 0.001 * failureRate - 0.000001 * reputation
-    // Add small trust score bonus (proportional to trust_score, e.g. +0.02 * trust_score)
+    // Add trust-aware routing bonus: small monotonic bonus for higher tier/score
+    // +0.02 for low tier, +0.05 for trusted tier, plus +0.02 * trust_score
     // This influences tie-breaks but doesn't dominate price/latency
     const trustScore = (provider as any)._trustScore || 0;
-    const trustBonus = -0.02 * trustScore; // Negative because lower utility is better
+    const trustTier = (provider as any)._trustTier || "untrusted";
+    let trustBonus = 0;
+    if (trustTier === "trusted") {
+      trustBonus = -0.05; // +0.05 bonus (negative because lower utility is better)
+    } else if (trustTier === "low") {
+      trustBonus = -0.02; // +0.02 bonus
+    }
+    trustBonus -= 0.02 * trustScore; // Additional score-based bonus
     const utility = askPrice +
       0.00000001 * latencyMs +
       0.001 * 0 - // failure_rate

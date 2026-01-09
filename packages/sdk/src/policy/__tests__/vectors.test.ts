@@ -55,8 +55,10 @@ describe("Compliance Vectors", () => {
             kya: {
               trust: {
                 require_trusted_issuer: false,
+                require_credential: false,
                 trusted_issuers: ["self"],
                 issuer_weights: { "self": 0.2 },
+                min_trust_tier: "untrusted",
                 min_trust_score: 0.0,
               },
             },

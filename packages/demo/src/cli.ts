@@ -258,6 +258,19 @@ async function main() {
       : rawExplain || "none"
   ) as "none" | "coarse" | "full";
   
+  // Trust tier routing flags (v1.5.8+)
+  const rawMinTrustTier = args.minTrustTier || args["min-trust-tier"];
+  const minTrustTier = Array.isArray(rawMinTrustTier)
+    ? (rawMinTrustTier[rawMinTrustTier.length - 1] as "untrusted" | "low" | "trusted")
+    : (rawMinTrustTier as "untrusted" | "low" | "trusted" | undefined);
+  
+  const rawMinTrustScore = args.minTrustScore || args["min-trust-score"];
+  const minTrustScore = typeof rawMinTrustScore === "number"
+    ? rawMinTrustScore
+    : (typeof rawMinTrustScore === "string" ? parseFloat(rawMinTrustScore) : undefined);
+  
+  const requireCredential = !!args.requireCredential || !!args["require-credential"];
+  
   // Note: For bad-reveal demo, the provider server must be started with
   // PACT_DEV_BAD_REVEAL=1 environment variable set, as the provider server
   // runs in a separate process and reads its own environment.
@@ -533,6 +546,10 @@ async function main() {
       useReputationV2: true, // Enable credential-aware, volume-weighted reputation (v1.5.3+)
       saveTranscript: saveTranscript || isDemoMode, // Enable transcripts for demo modes (v1.5.4+)
       transcriptDir: transcriptDir,
+      // Trust tier routing overrides (v1.5.8+)
+      ...(minTrustTier ? { minTrustTier } : {}),
+      ...(minTrustScore !== undefined ? { minTrustScore } : {}),
+      ...(requireCredential ? { requireCredential: true } : {}),
     },
     buyerKeyPair,
     sellerKeyPair,

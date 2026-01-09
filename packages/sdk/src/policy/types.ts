@@ -6,8 +6,10 @@ export type PolicyMode = "best_price" | "balanced" | "fastest" | "trusted_only";
 
 export interface KyaTrustConfig {
   require_trusted_issuer: boolean;
+  require_credential: boolean;
   trusted_issuers: string[];
   issuer_weights: Record<string, number>;
+  min_trust_tier: "untrusted" | "low" | "trusted";
   min_trust_score: number;
 }
 

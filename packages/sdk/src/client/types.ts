@@ -15,6 +15,10 @@ export type AcquireInput = {
   // Optional transcript saving (v1.5.4+)
   saveTranscript?: boolean; // Save full transcript for audit/debug
   transcriptDir?: string; // Custom directory for transcripts (default: .pact/transcripts)
+  // Optional trust tier routing (v1.5.8+)
+  minTrustTier?: "untrusted" | "low" | "trusted"; // Override policy min_trust_tier
+  minTrustScore?: number; // Override policy min_trust_score
+  requireCredential?: boolean; // Override policy require_credential
   // Optional identity/verification (v1: for policy enforcement)
   identity?: {
     buyer?: {
@@ -58,6 +62,8 @@ export type AcquireResult = {
     commitVerified?: boolean;  // Only set for hash_reveal mode with HTTP provider
     revealVerified?: boolean;  // Only set for hash_reveal mode with HTTP provider
   };
+  // Optional transcript path (v1.5.4+)
+  transcriptPath?: string;
 } | {
   ok: false;
   plan?: any;
