@@ -301,15 +301,15 @@ describe("Commit/Reveal Exchange", () => {
 
     // Check funds locked
     const buyerAccount = settlement.getAccount("buyer");
-    // With lifecycle API, commit happens during accept, so funds are already transferred (locked = 0)
-    expect(buyerAccount?.locked).toBe(0); // Lifecycle API transfers immediately
-    expect(buyerAccount?.balance).toBe(1.0 - 0.000075); // Payment already deducted
-
     const sellerAccount = settlement.getAccount("seller");
-    expect(sellerAccount?.locked).toBe(0.00001); // bond
-    // With lifecycle API, payment is transferred on commit (during accept), so seller already received payment
-    // Seller: starts 1.0, locks 0.00001 bond (balance 0.99999), receives payment 0.000075 (balance 1.000065)
-    expect(sellerAccount?.balance).toBeCloseTo(1.0 + 0.000075 - 0.00001, 10); // 1.000065 (received payment, bond still locked)
+
+    // With lifecycle API, accept() may prepare+commit immediately.
+    // So buyer funds should no longer be locked; they should be transferred.
+    expect(buyerAccount?.locked).toBe(0);
+    expect(buyerAccount?.balance).toBeCloseTo(1.0 - 0.000075, 12);
+
+    expect(sellerAccount?.locked).toBeCloseTo(0.00001, 12); // bond still locked
+    expect(sellerAccount?.balance).toBeCloseTo(1.0 - 0.00001 + 0.000075, 12); // payment received (accounting for bond lock)
 
     // Commit
     now += 100;
