@@ -958,11 +958,11 @@ export class NegotiationSession {
       if (now > this.agreement.delivery_deadline_ms) {
         if (this.status === "LOCKED") {
           // Seller failed to commit
-          this.slashSeller("Seller failed to commit by deadline");
+          await this.slashSeller("Seller failed to commit by deadline");
           return this.terminal_result ?? null;
         } else if (this.status === "EXCHANGING") {
           // Seller failed to reveal
-          this.slashSeller("Seller failed to reveal by deadline");
+          await this.slashSeller("Seller failed to reveal by deadline");
           return this.terminal_result ?? null;
         }
       }

@@ -301,12 +301,15 @@ describe("Commit/Reveal Exchange", () => {
 
     // Check funds locked
     const buyerAccount = settlement.getAccount("buyer");
-    expect(buyerAccount?.locked).toBe(0.000075);
-    expect(buyerAccount?.balance).toBe(1.0 - 0.000075);
+    // With lifecycle API, commit happens during accept, so funds are already transferred (locked = 0)
+    expect(buyerAccount?.locked).toBe(0); // Lifecycle API transfers immediately
+    expect(buyerAccount?.balance).toBe(1.0 - 0.000075); // Payment already deducted
 
     const sellerAccount = settlement.getAccount("seller");
     expect(sellerAccount?.locked).toBe(0.00001); // bond
-    expect(sellerAccount?.balance).toBe(1.0 - 0.00001);
+    // With lifecycle API, payment is transferred on commit (during accept), so seller already received payment
+    // Seller: starts 1.0, locks 0.00001 bond (balance 0.99999), receives payment 0.000075 (balance 1.000065)
+    expect(sellerAccount?.balance).toBeCloseTo(1.0 + 0.000075 - 0.00001, 10); // 1.000065 (received payment, bond still locked)
 
     // Commit
     now += 100;
@@ -387,15 +390,18 @@ describe("Commit/Reveal Exchange", () => {
 
     // Advance time beyond deadline
     now += 2000;
-    session.tick();
+    await session.tick();
 
     // Check seller slashed
     const buyerAccount = settlement.getAccount("buyer");
-    expect(buyerAccount?.balance).toBe(1.0 + 0.00001); // Refunded payment + slashed bond
+    // With lifecycle API, payment was already transferred to seller, so on slash we refund payment + slash bond
+    // Buyer: starts 1.0, paid 0.000075 (balance 0.999925), refunded 0.000075 + slashed bond 0.00001 = 1.00001
+    expect(buyerAccount?.balance).toBeCloseTo(1.0 + 0.00001, 10); // Refunded payment + slashed bond
     expect(buyerAccount?.locked).toBe(0);
 
     const sellerAccount = settlement.getAccount("seller");
-    expect(sellerAccount?.balance).toBe(1.0 - 0.00001); // Bond slashed
+    // With lifecycle API: seller received 0.000075 (balance 1.000075), refunded 0.000075 (balance 1.0), bond 0.00001 slashed (balance 0.99999)
+    expect(sellerAccount?.balance).toBeCloseTo(1.0 - 0.00001, 10); // Bond slashed (payment already refunded)
     expect(sellerAccount?.locked).toBe(0);
 
     // Check receipt
@@ -457,11 +463,14 @@ describe("Commit/Reveal Exchange", () => {
 
     // Check seller slashed
     const buyerAccount = settlement.getAccount("buyer");
-    expect(buyerAccount?.balance).toBe(1.0 + 0.00001); // Refunded payment + slashed bond
+    // With lifecycle API, payment was already transferred to seller, so on slash we refund payment + slash bond
+    // Buyer: starts 1.0, paid 0.000075 (balance 0.999925), refunded 0.000075 + slashed bond 0.00001 = 1.00001
+    expect(buyerAccount?.balance).toBeCloseTo(1.0 + 0.00001, 10); // Refunded payment + slashed bond
     expect(buyerAccount?.locked).toBe(0);
 
     const sellerAccount = settlement.getAccount("seller");
-    expect(sellerAccount?.balance).toBe(1.0 - 0.00001); // Bond slashed
+    // With lifecycle API: seller received 0.000075 (balance 1.000075), refunded 0.000075 (balance 1.0), bond 0.00001 slashed (balance 0.99999)
+    expect(sellerAccount?.balance).toBeCloseTo(1.0 - 0.00001, 10); // Bond slashed (payment already refunded)
     expect(sellerAccount?.locked).toBe(0);
 
     // Check receipt
