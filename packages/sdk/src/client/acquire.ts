@@ -1235,6 +1235,7 @@ export async function acquire(params: {
   let firstAttemptIntentId: string | undefined; // Track first attempt intentId for transcript when all fail
   let finalSelectedProvider: ProviderCandidate | undefined;
   let finalSelectedProviderPubkey: string | undefined;
+  let finalSession: NegotiationSession | undefined; // v1.6.7+: Track session for SLA violations (D1)
   
   // Helper function to handle attempt failures with retry logic (B2)
   const handleAttemptFailure = (failureCode: string, failureReason: string, attemptEntry: typeof settlementAttempts[0]): "continue" | "return" => {
@@ -1847,6 +1848,41 @@ export async function acquire(params: {
         total_paid: totalPaid,
         segments_used: segments.filter(s => s.status === "committed").length,
       };
+    }
+  }
+
+  // v1.6.7+: Record settlement SLA violations if any (D1)
+  if (transcriptData) {
+    const violations = session.getSettlementSLAViolations();
+    const slaConfig = compiled.base.settlement?.settlement_sla;
+    
+    if (violations.length > 0 || slaConfig) {
+      transcriptData.settlement_sla = {
+        enabled: slaConfig?.enabled || false,
+        max_pending_ms: slaConfig?.max_pending_ms,
+        max_poll_attempts: slaConfig?.max_poll_attempts,
+        poll_interval_ms: slaConfig?.poll_interval_ms,
+        violations: violations.length > 0 ? violations : undefined,
+      };
+      
+      // v1.6.7+: Apply minimal reputation penalty if enabled (D1)
+      if (slaConfig?.penalty?.enabled && violations.length > 0 && store) {
+        // Record penalty receipts for each violation (minimal hook)
+        for (const violation of violations) {
+          const penaltyReceipt = createReceipt({
+            intent_id: finalIntentId || `intent-${nowFunction()}-sla-penalty`,
+            buyer_agent_id: buyerId,
+            seller_agent_id: finalSelectedProviderPubkey || "unknown",
+            agreed_price: 0, // Zero paid amount for penalty
+            fulfilled: false,
+            timestamp_ms: violation.ts_ms,
+            failure_code: "SETTLEMENT_SLA_VIOLATION",
+            paid_amount: 0,
+          });
+          (penaltyReceipt as any).intent_type = input.intentType;
+          store.ingest(penaltyReceipt);
+        }
+      }
     }
   }
 
@@ -2612,6 +2648,7 @@ export async function acquire(params: {
     finalIntentId = intentId;
     finalSelectedProvider = selectedProvider;
     finalSelectedProviderPubkey = selectedProviderPubkey;
+    finalSession = session; // v1.6.7+: Store session for SLA violation tracking (D1)
     
     break; // Exit the for loop
     } catch (error: any) {
@@ -2669,6 +2706,41 @@ export async function acquire(params: {
     // All attempts failed
     if (transcriptData) {
       transcriptData.settlement_attempts = settlementAttempts;
+      
+      // v1.6.7+: Record settlement SLA violations if any (D1) - even on failure
+      // Note: session may not be in scope here if all attempts failed before creating session
+      // We'll record violations from the last attempt's session if available
+      const violations = finalSession?.getSettlementSLAViolations() || [];
+      const slaConfig = compiled.base.settlement?.settlement_sla;
+      
+      if (violations.length > 0 || slaConfig) {
+        transcriptData.settlement_sla = {
+          enabled: slaConfig?.enabled || false,
+          max_pending_ms: slaConfig?.max_pending_ms,
+          max_poll_attempts: slaConfig?.max_poll_attempts,
+          poll_interval_ms: slaConfig?.poll_interval_ms,
+          violations: violations.length > 0 ? violations : undefined,
+        };
+        
+        // v1.6.7+: Apply minimal reputation penalty if enabled (D1)
+        if (slaConfig?.penalty?.enabled && violations.length > 0 && store && finalSelectedProvider) {
+          // Record penalty receipts for each violation (minimal hook)
+          for (const violation of violations) {
+            const penaltyReceipt = createReceipt({
+              intent_id: firstAttemptIntentId || finalIntentId || `intent-${nowFunction()}-sla-penalty`,
+              buyer_agent_id: buyerId,
+              seller_agent_id: finalSelectedProviderPubkey || "unknown",
+              agreed_price: 0, // Zero paid amount for penalty
+              fulfilled: false,
+              timestamp_ms: violation.ts_ms,
+              failure_code: "SETTLEMENT_SLA_VIOLATION",
+              paid_amount: 0,
+            });
+            (penaltyReceipt as any).intent_type = input.intentType;
+            store.ingest(penaltyReceipt);
+          }
+        }
+      }
     }
     
     // Return last failure or NO_ELIGIBLE_PROVIDERS if none attempted

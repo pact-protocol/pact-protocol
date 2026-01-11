@@ -96,6 +96,14 @@ export class NegotiationSession {
     failure_reason?: string;
   }> = [];
   private splitTotalPaid: number = 0;
+  // v1.6.7+: Settlement SLA violations (D1)
+  private settlementSLAViolations: Array<{
+    ts_ms: number;
+    code: string;
+    reason: string;
+    handle_id?: string;
+    provider?: string;
+  }> = [];
 
   constructor(
     private params: NegotiationSessionParams
@@ -125,6 +133,7 @@ export class NegotiationSession {
 
   /**
    * Poll settlement until resolved (v1.7.2+)
+   * v1.6.7+: Enforces SLA constraints (D1)
    */
   private async pollSettlementUntilResolved(
     handle_id: string,
@@ -134,10 +143,41 @@ export class NegotiationSession {
       return { ok: false, code: "SETTLEMENT_POLL_NOT_SUPPORTED", reason: "Settlement provider does not support polling" };
     }
 
-    const pollDelay = this.params.settlementAutoPollMs ?? 0;
+    // v1.6.7+: Get SLA settings (D1)
+    const slaConfig = this.params.compiledPolicy.base.settlement?.settlement_sla;
+    const slaEnabled = slaConfig?.enabled === true;
+    
+    // Determine poll interval: input.settlement.auto_poll_ms ?? policy.poll_interval_ms ?? 0
+    const pollDelay = this.params.settlementAutoPollMs ?? (slaConfig?.poll_interval_ms ?? 0);
+    
+    // Determine max attempts: policy.max_poll_attempts (if >0) else existing default
+    const effectiveMaxAttempts = slaEnabled && slaConfig?.max_poll_attempts && slaConfig.max_poll_attempts > 0
+      ? slaConfig.max_poll_attempts
+      : maxAttempts;
+    
+    // Track elapsed time from first pending response
+    const startPendingMs = this.params.now();
     let attempts = 0;
+    const providerName = (this.params.settlement as any).constructor?.name || "unknown";
 
-    while (attempts < maxAttempts) {
+    while (attempts < effectiveMaxAttempts) {
+      // v1.6.7+: Check max_pending_ms SLA (D1)
+      if (slaEnabled && slaConfig?.max_pending_ms && slaConfig.max_pending_ms > 0) {
+        const elapsedMs = this.params.now() - startPendingMs;
+        if (elapsedMs > slaConfig.max_pending_ms) {
+          // SLA violation: pending exceeded
+          const violation = {
+            ts_ms: this.params.now(),
+            code: "SETTLEMENT_SLA_VIOLATION",
+            reason: `pending exceeded SLA: ${elapsedMs}ms > ${slaConfig.max_pending_ms}ms`,
+            handle_id,
+            provider: providerName,
+          };
+          this.settlementSLAViolations.push(violation);
+          return { ok: false, code: "SETTLEMENT_SLA_VIOLATION", reason: violation.reason };
+        }
+      }
+      
       const result = await this.params.settlement.poll(handle_id);
       
       if (result.status === "committed") {
@@ -158,6 +198,20 @@ export class NegotiationSession {
       }
       
       attempts++;
+    }
+
+    // v1.6.7+: Check max_poll_attempts SLA (D1)
+    if (slaEnabled && slaConfig?.max_poll_attempts && slaConfig.max_poll_attempts > 0 && attempts >= slaConfig.max_poll_attempts) {
+      // SLA violation: poll attempts exceeded
+      const violation = {
+        ts_ms: this.params.now(),
+        code: "SETTLEMENT_SLA_VIOLATION",
+        reason: `poll attempts exceeded SLA: ${attempts} >= ${slaConfig.max_poll_attempts}`,
+        handle_id,
+        provider: providerName,
+      };
+      this.settlementSLAViolations.push(violation);
+      return { ok: false, code: "SETTLEMENT_SLA_VIOLATION", reason: violation.reason };
     }
 
     return { ok: false, code: "SETTLEMENT_POLL_TIMEOUT", reason: `Settlement still pending after ${attempts} poll attempts` };
@@ -1186,6 +1240,19 @@ export class NegotiationSession {
    */
   getSplitTotalPaid(): number {
     return this.splitTotalPaid;
+  }
+
+  /**
+   * Get settlement SLA violations (v1.6.7+, D1).
+   */
+  getSettlementSLAViolations(): Array<{
+    ts_ms: number;
+    code: string;
+    reason: string;
+    handle_id?: string;
+    provider?: string;
+  }> {
+    return [...this.settlementSLAViolations];
   }
 
   /**

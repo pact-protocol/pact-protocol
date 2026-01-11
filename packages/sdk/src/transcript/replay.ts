@@ -415,6 +415,45 @@ export async function replayTranscript(
     }
   }
 
+  // Verify settlement SLA violations (v1.6.7+, D1)
+  if (transcript.settlement_sla) {
+    const sla = transcript.settlement_sla;
+    
+    // Check: if violations exist, each should have ts_ms and code
+    if (sla.violations && Array.isArray(sla.violations)) {
+      for (const violation of sla.violations) {
+        if (!violation.ts_ms || !violation.code) {
+          failures.push({
+            code: "SETTLEMENT_SLA_INVALID",
+            reason: "SLA violation missing ts_ms or code",
+            context: {
+              violation,
+            },
+          });
+        }
+      }
+      
+      // Check: if final outcome is success, violations are allowed (fallback succeeded)
+      // Check: if final outcome is failure, last violation should match final failure code if SLA was the reason
+      if (!transcript.outcome.ok && sla.violations.length > 0) {
+        const lastViolation = sla.violations[sla.violations.length - 1];
+        const finalCode = transcript.outcome.code;
+        
+        // If final failure is SLA-related, last violation should match
+        if (finalCode === "SETTLEMENT_SLA_VIOLATION" && lastViolation.code !== "SETTLEMENT_SLA_VIOLATION") {
+          failures.push({
+            code: "SETTLEMENT_SLA_MISMATCH",
+            reason: "Final failure is SETTLEMENT_SLA_VIOLATION but last violation code doesn't match",
+            context: {
+              final_code: finalCode,
+              last_violation_code: lastViolation.code,
+            },
+          });
+        }
+      }
+    }
+  }
+
   // Verify split settlement segments (v1.6.6+, B3)
   if (transcript.settlement_split_summary?.enabled) {
     const splitSummary = transcript.settlement_split_summary;

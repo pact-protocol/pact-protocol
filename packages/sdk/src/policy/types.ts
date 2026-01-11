@@ -150,12 +150,27 @@ export interface SettlementStreaming {
   cutoff_on_violation: boolean;
 }
 
+export interface SettlementSLAPenalty {
+  enabled: boolean;
+  provider_penalty: number;
+  buyer_penalty: number;
+}
+
+export interface SettlementSLA {
+  enabled: boolean;
+  max_pending_ms: number;
+  max_poll_attempts: number;
+  poll_interval_ms: number;
+  penalty: SettlementSLAPenalty;
+}
+
 export interface SettlementConstraints {
   allowed_modes: SettlementMode[];
   default_mode: SettlementMode;
   pre_settlement_lock_required: boolean;
   challenge_window_ms: number;
   streaming: SettlementStreaming;
+  settlement_sla?: SettlementSLA;
 }
 
 export interface SettlementRoutingRule {
@@ -305,6 +320,7 @@ export type FailureCode =
   | "PRE_SETTLEMENT_LOCK_REQUIRED"
   | "BOND_INSUFFICIENT"
   | "SETTLEMENT_FAILED" // v1.7.2+: Settlement provider commit failure
+  | "SETTLEMENT_SLA_VIOLATION" // v1.6.7+: Settlement SLA timeout/poll limit exceeded
   | "SCHEMA_VALIDATION_FAILED"
   | "STREAMING_SPEND_CAP_EXCEEDED"
   | "LATENCY_BREACH"

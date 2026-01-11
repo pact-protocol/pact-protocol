@@ -129,6 +129,17 @@ export function createDefaultPolicy(nowMs?: number): PactPolicy {
         max_spend_per_minute: 0.02,
         cutoff_on_violation: true,
       },
+      settlement_sla: {
+        enabled: false,
+        max_pending_ms: 0,
+        max_poll_attempts: 0,
+        poll_interval_ms: 0,
+        penalty: {
+          enabled: false,
+          provider_penalty: 0.0,
+          buyer_penalty: 0.0,
+        },
+      },
     },
     settlement_routing: {
       default_provider: "mock",

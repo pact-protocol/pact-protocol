@@ -401,6 +401,27 @@
               "max_spend_per_minute": { "type": "number", "minimum": 0 },
               "cutoff_on_violation": { "type": "boolean" }
             }
+          },
+          "settlement_sla": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["enabled", "max_pending_ms", "max_poll_attempts", "poll_interval_ms", "penalty"],
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "max_pending_ms": { "type": "integer", "minimum": 0 },
+              "max_poll_attempts": { "type": "integer", "minimum": 0 },
+              "poll_interval_ms": { "type": "integer", "minimum": 0 },
+              "penalty": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["enabled", "provider_penalty", "buyer_penalty"],
+                "properties": {
+                  "enabled": { "type": "boolean" },
+                  "provider_penalty": { "type": "number", "minimum": 0, "maximum": 1 },
+                  "buyer_penalty": { "type": "number", "minimum": 0, "maximum": 1 }
+                }
+              }
+            }
           }
         }
       },

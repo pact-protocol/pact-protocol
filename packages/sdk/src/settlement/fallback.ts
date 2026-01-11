@@ -67,6 +67,7 @@ export function isRetryableFailure(code: string): boolean {
     "SETTLEMENT_POLL_TIMEOUT",
     "SETTLEMENT_PENDING_UNRESOLVED",
     "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+    "SETTLEMENT_SLA_VIOLATION", // v1.6.7+: Settlement SLA timeout/poll limit exceeded (retryable)
     "PROVIDER_QUOTE_HTTP_ERROR",
     "PROVIDER_QUOTE_PARSE_ERROR",
     "PROVIDER_SIGNATURE_INVALID", // Could be temporary network issue

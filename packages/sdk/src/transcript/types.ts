@@ -168,5 +168,20 @@ export type TranscriptV1 = {
     total_paid: number; // Total amount paid across all segments
     segments_used: number; // Number of segments used
   };
+  
+  // Settlement SLA (v1.6.7+, D1)
+  settlement_sla?: {
+    enabled: boolean;
+    max_pending_ms?: number;
+    max_poll_attempts?: number;
+    poll_interval_ms?: number;
+    violations?: Array<{
+      ts_ms: number;
+      code: string;
+      reason: string;
+      handle_id?: string;
+      provider?: string;
+    }>;
+  };
 };
 
