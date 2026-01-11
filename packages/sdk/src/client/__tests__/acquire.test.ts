@@ -1318,11 +1318,25 @@ describe("acquire", () => {
       policy.counterparty.require_credentials = [];
       policy.counterparty.max_failure_rate = 1.0; // Allow any failure rate
       policy.counterparty.max_timeout_rate = 1.0; // Allow any timeout rate
-      // Ensure both providers have sufficient reputation
+      
+      // Configure routing: low tier -> mock (succeeds), untrusted -> external (fails via default)
+      // Provider 1 (no endpoint) -> untrusted tier -> routes to external -> fails (retryable)
+      // Provider 2 (HTTP endpoint + sla_verified) -> low tier (0.2 + 0.1 = 0.3) -> routes to mock -> succeeds
+      policy.settlement_routing = {
+        default_provider: "external", // Untrusted providers route here (fails)
+        rules: [
+          {
+            when: {
+              min_trust_tier: "low", // Provider 2 with HTTP endpoint + credential (0.3 = low tier)
+            },
+            use: "mock", // Success - low tier providers use mock
+          },
+        ],
+      };
+      
       const store = new ReceiptStore();
       
-      // Add some reputation for both providers so they pass eligibility
-      // This simulates providers with history
+      // Add reputation for both providers so they pass eligibility
       const mockReceipt1 = {
         intent_id: "test1",
         agentId: seller1.id,
@@ -1342,118 +1356,106 @@ describe("acquire", () => {
       store.ingest(mockReceipt1);
       store.ingest(mockReceipt2);
       
-      // Configure routing to select "external" (will fail - retryable) for first attempt
-      // and "mock" (will succeed) for second attempt.
-      // Use amount-based routing: "external" for small amounts, "mock" for larger amounts.
-      // Provider quotes are computed from hash of provider ID, so different providers
-      // will have different quotes, allowing routing to differentiate.
-      policy.settlement_routing = {
-        default_provider: "mock",
-        rules: [
-          {
-            when: {
-              max_amount: 0.00008, // Threshold between provider quotes
-            },
-            use: "external", // First provider's quote will be <= this -> "external" -> fails
-          },
-        ],
-      };
-      
       const directory = new InMemoryProviderDirectory();
       
-      // Register two providers
-      // Provider 1: lower latency, selected first, will quote price that routes to "external"
+      // Provider 1: No endpoint -> no credential -> untrusted tier -> routes to external -> fails
       directory.registerProvider({
         provider_id: "provider1",
         intentType: "weather.data",
         pubkey_b58: seller1.id,
-        baseline_latency_ms: 50, // Lower latency, selected first
+        baseline_latency_ms: 10, // Very low latency, selected first (better utility)
+        // No endpoint -> credentialPresent = false -> _trustTier = "untrusted"
       });
       
-      // Provider 2: higher latency, selected second, will quote price that routes to "mock" (default)
-      directory.registerProvider({
-        provider_id: "provider2",
-        intentType: "weather.data",
-        pubkey_b58: seller2.id,
-        baseline_latency_ms: 100, // Higher latency, selected second
+      // Provider 2: HTTP endpoint -> credential fetched -> low tier -> routes to mock -> succeeds
+      const server2 = startProviderServer({
+        port: 0,
+        sellerKeyPair: seller2.keyPair,
+        sellerId: seller2.id,
       });
       
-      const result = await acquire({
-        input: {
+      try {
+        directory.registerProvider({
+          provider_id: "provider2",
           intentType: "weather.data",
-          scope: "NYC",
-          constraints: { latency_ms: 100, freshness_sec: 10 },
-          maxPrice: 0.0001,
-          saveTranscript: true,
-          transcriptDir: "/tmp/test-transcripts",
-        },
-        buyerKeyPair: buyer.keyPair,
-        sellerKeyPair: seller1.keyPair, // Used for all providers
-        sellerKeyPairsByPubkeyB58: {
-          [seller1.id]: seller1.keyPair,
-          [seller2.id]: seller2.keyPair,
-        },
-        buyerId: buyer.id,
-        sellerId: seller1.id, // This is just a placeholder when using directory
-        policy,
-        store,
-        directory,
-        now: createClock(),
-      });
-      
-      // Debug: Check what happened
-      if (!result.ok) {
-        console.log("Acquire failed:", result);
-        // If result has transcriptPath, check transcript for attempts
+          pubkey_b58: seller2.id,
+          endpoint: server2.url, // HTTP endpoint -> credential fetched -> _trustTier = "low" (0.3)
+          baseline_latency_ms: 200, // Much higher latency, selected second (worse utility)
+        });
+        
+        const result = await acquire({
+          input: {
+            intentType: "weather.data",
+            scope: "NYC",
+            constraints: { latency_ms: 100, freshness_sec: 10 },
+            maxPrice: 0.0001,
+            explain: "summary", // CRITICAL: ensures both providers are eligible
+            saveTranscript: true,
+            transcriptDir: "/tmp/test-transcripts",
+          },
+          buyerKeyPair: buyer.keyPair,
+          sellerKeyPair: seller1.keyPair, // Used for all providers (backward compatibility)
+          sellerKeyPairsByPubkeyB58: {
+            [seller1.id]: seller1.keyPair,
+            [seller2.id]: seller2.keyPair,
+          },
+          buyerId: buyer.id,
+          policy,
+          store,
+          directory,
+          now: createClock(),
+        });
+        
+        // Debug: Check what happened
+        if (!result.ok) {
+          console.log("Acquire failed:", result);
+          if (result.transcriptPath) {
+            const transcriptContent = fs.readFileSync(result.transcriptPath, "utf-8");
+            const transcript = JSON.parse(transcriptContent);
+            console.log("Transcript settlement_attempts:", JSON.stringify(transcript.settlement_attempts, null, 2));
+          }
+        }
+        
+        // Assertions: Should succeed (either provider1 fails and provider2 succeeds, or provider2 succeeds first)
+        expect(result.ok).toBe(true);
+        expect(result.transcriptPath).toBeDefined();
+        
         if (result.transcriptPath) {
           const transcriptContent = fs.readFileSync(result.transcriptPath, "utf-8");
           const transcript = JSON.parse(transcriptContent);
-          console.log("Transcript settlement_attempts:", JSON.stringify(transcript.settlement_attempts, null, 2));
-        }
-      }
-      
-      // Note: This test currently only verifies 1 provider is eligible due to directory fanout limitations.
-      // In a real scenario with multiple eligible providers, the fallback mechanism would retry with the next provider.
-      // The fallback logic is tested in fallback.test.ts for the core functions (isRetryableFailure, buildFallbackPlan).
-      // TODO: Fix directory fanout to ensure multiple providers are eligible for full integration test.
-      
-      // For now, just verify that the error handling works correctly
-      // If there's only 1 eligible provider, no fallback occurs (expected behavior)
-      // The transcript should still record the attempt (if transcript is saved on failure)
-      
-      // Skip this test for now until directory fanout issue is resolved
-      expect(true).toBe(true); // Placeholder - test will be re-enabled when fixed
-      if (result.ok && result.transcriptPath) {
-        // Verify transcript contains settlement_attempts with 2 entries
-        const transcriptContent = fs.readFileSync(result.transcriptPath, "utf-8");
-        const transcript = JSON.parse(transcriptContent);
-        
-        expect(transcript.settlement_attempts).toBeDefined();
-        expect(transcript.settlement_attempts.length).toBeGreaterThanOrEqual(1);
-        
-        // At least one attempt should exist
-        // If first attempt failed, second should succeed
-        const failedAttempt = transcript.settlement_attempts.find((a: any) => a.outcome === "failed");
-        const successfulAttempt = transcript.settlement_attempts.find((a: any) => a.outcome === "success");
-        
-        if (failedAttempt) {
-          // First attempt failed with SETTLEMENT_PROVIDER_NOT_IMPLEMENTED
-          expect(failedAttempt.failure_code).toBe("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED");
-          expect(failedAttempt.settlement_provider).toBe("external");
           
-          // Second attempt should be successful
+          expect(transcript.settlement_attempts).toBeDefined();
+          
+          // Find the successful attempt
+          const successfulAttempt = transcript.settlement_attempts.find((a: any) => a.outcome === "success");
           expect(successfulAttempt).toBeDefined();
-          expect(successfulAttempt.outcome).toBe("success");
           expect(successfulAttempt.settlement_provider).toBe("mock");
           
-          // Verify both providers are different
-          expect(failedAttempt.provider_pubkey).not.toBe(successfulAttempt.provider_pubkey);
-        } else {
-          // If no failed attempt, then first attempt succeeded (provider2 was selected first)
-          // or routing selected "mock" for provider1 too
-          expect(successfulAttempt).toBeDefined();
-          expect(successfulAttempt.outcome).toBe("success");
+          // If there are 2 attempts, first should have failed with SETTLEMENT_PROVIDER_NOT_IMPLEMENTED
+          if (transcript.settlement_attempts.length === 2) {
+            const failedAttempt = transcript.settlement_attempts.find((a: any) => a.outcome === "failed");
+            expect(failedAttempt).toBeDefined();
+            expect(failedAttempt.failure_code).toBe("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED");
+            expect(failedAttempt.settlement_provider).toBe("external");
+            
+            // Verify providers are different
+            expect(failedAttempt.provider_pubkey).not.toBe(successfulAttempt.provider_pubkey);
+            
+            // Verify order: failed attempt should have idx 0, success should have idx 1
+            expect(failedAttempt.idx).toBe(0);
+            expect(successfulAttempt.idx).toBe(1);
+          } else {
+            // If only 1 attempt, it must be provider2 (low tier -> mock -> succeeds)
+            // This is fine - it proves routing works, but doesn't test fallback
+            // For fallback test, we need provider1 to be selected first
+            expect(transcript.settlement_attempts).toHaveLength(1);
+            expect(transcript.settlement_attempts[0].outcome).toBe("success");
+            // Note: This doesn't test fallback, but it does verify routing works
+            // To test fallback, we'd need provider1 to be selected first
+          }
         }
+      } finally {
+        server2.close();
       }
     });
   });
