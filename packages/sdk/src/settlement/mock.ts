@@ -386,5 +386,20 @@ export class MockSettlementProvider implements SettlementProvider {
       };
     }
   }
+
+  refund(fromAgentId: string, toAgentId: string, amount: number, meta?: Record<string, unknown>): void {
+    if (!(amount > 0)) {
+      throw new Error("Refund amount must be > 0");
+    }
+    const fromAcct = this.acct(fromAgentId);
+    // Check if seller has sufficient balance
+    if (fromAcct.balance < amount) {
+      throw new Error("REFUND_INSUFFICIENT_FUNDS");
+    }
+    // Transfer from seller to buyer
+    fromAcct.balance -= amount;
+    this.acct(toAgentId).balance += amount;
+    // meta is ignored in mock implementation but available for external providers
+  }
 }
 

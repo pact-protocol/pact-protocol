@@ -43,6 +43,9 @@ export * from "./router/index";
 // Client
 export * from "./client/index";
 
+// Disputes
+export * from "./disputes/index";
+
 // Directory
 export * from "./directory/index";
 

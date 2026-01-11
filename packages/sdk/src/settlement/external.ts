@@ -147,5 +147,11 @@ export class ExternalSettlementProvider implements SettlementProvider {
       `${this.errorMessage}: abort() - Real implementations should integrate with ${this.config.rail} payment rail`
     );
   }
+
+  refund(fromAgentId: string, toAgentId: string, amount: number, meta?: Record<string, unknown>): void {
+    throw new Error(
+      `${this.errorMessage}: refund() - Real implementations should integrate with ${this.config.rail} payment rail`
+    );
+  }
 }
 

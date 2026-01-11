@@ -75,6 +75,17 @@
                 }
               }
             }
+          },
+          "disputes": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["enabled", "window_ms", "allow_partial", "max_refund_pct"],
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "window_ms": { "type": "integer", "minimum": 0 },
+              "allow_partial": { "type": "boolean" },
+              "max_refund_pct": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
           }
         }
       },

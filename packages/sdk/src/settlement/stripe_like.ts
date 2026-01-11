@@ -499,5 +499,10 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
   getAccount(agentId: string): { balance: number; locked: number } {
     return this.mockProvider.getAccount(agentId);
   }
+
+  refund(fromAgentId: string, toAgentId: string, amount: number, meta?: Record<string, unknown>): void {
+    // Delegate to underlying mock provider
+    this.mockProvider.refund(fromAgentId, toAgentId, amount, meta);
+  }
 }
 

@@ -13,10 +13,18 @@ export interface KyaTrustConfig {
   min_trust_score: number;
 }
 
+export interface DisputeConstraints {
+  enabled: boolean;
+  window_ms: number;
+  allow_partial: boolean;
+  max_refund_pct: number;
+}
+
 export interface BaseConstraints {
   kya: {
     trust: KyaTrustConfig;
   };
+  disputes?: DisputeConstraints;
 }
 
 export interface TimeConstraints {
