@@ -29,5 +29,10 @@ export interface DisputeRecord {
     receipt?: boolean;
     settlement_events?: boolean;
   };
+  // C3: Signed decision artifact fields
+  decision_path?: string;
+  decision_hash_hex?: string;
+  decision_signature_b58?: string;
+  arbiter_pubkey_b58?: string;
 }
 

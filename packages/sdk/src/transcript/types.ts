@@ -194,6 +194,9 @@ export type TranscriptV1 = {
     status: "resolved" | "failed";
     failure_code?: string;
     failure_reason?: string;
+    // C3: Signed decision artifact fields
+    decision_hash_hex?: string;
+    arbiter_pubkey_b58?: string;
   }>;
   
   // Streaming attempts (v1.6.9+, B4)

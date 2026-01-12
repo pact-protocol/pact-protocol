@@ -14,6 +14,8 @@ import { MockSettlementProvider } from "../../settlement/mock";
 import { ExternalSettlementProvider } from "../../settlement/external";
 import { createReceipt } from "../../exchange/receipt";
 import { replayTranscript } from "../../transcript/replay";
+import { verifyDecision } from "../decision";
+import { loadDecisionFromPath } from "../decisionStore";
 
 describe("dispute resolution (C2)", () => {
   let tempDir: string;
@@ -414,6 +416,140 @@ describe("dispute resolution (C2)", () => {
     // Check replay validation passes
     const replayResult = await replayTranscript(transcriptPath);
     expect(replayResult.ok).toBe(true);
+  });
+
+  it("C3: resolveDispute with arbiterKeyPair writes decision file and links fields on DisputeRecord", async () => {
+    const buyer = createKeyPair();
+    const seller = createKeyPair();
+    const arbiter = nacl.sign.keyPair();
+    const policy = createDefaultPolicy();
+    policy.base.disputes = {
+      enabled: true,
+      window_ms: 100000,
+      allow_partial: true,
+      max_refund_pct: 1.0,
+    };
+    const compiled = compilePolicy(policy);
+    const settlement = new MockSettlementProvider();
+    settlement.setBalance(seller.id, 1.0);
+    settlement.setBalance(buyer.id, 0.0);
+
+    const receipt = createReceipt({
+      intent_id: "test-intent-decision",
+      buyer_agent_id: buyer.id,
+      seller_agent_id: seller.id,
+      agreed_price: 0.1,
+      paid_amount: 0.1,
+      fulfilled: true,
+      timestamp_ms: Date.now(),
+    });
+
+    // Open dispute
+    const dispute = openDispute({
+      receipt,
+      reason: "Test dispute for decision",
+      now: Date.now(),
+      policy: compiled.base as any,
+      disputeDir: tempDir,
+    });
+
+    // Resolve with arbiter keypair
+    const result = await resolveDispute({
+      dispute_id: dispute.dispute_id,
+      outcome: "REFUND_FULL",
+      notes: "Test decision notes",
+      now: Date.now(),
+      policy: compiled.base as any,
+      settlementProvider: settlement,
+      receipt,
+      disputeDir: tempDir,
+      arbiterKeyPair: {
+        publicKey: arbiter.publicKey,
+        secretKey: arbiter.secretKey,
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.record).toBeDefined();
+
+    // Check dispute record has decision fields
+    const updatedDispute = result.record!;
+    expect(updatedDispute.decision_path).toBeDefined();
+    expect(updatedDispute.decision_hash_hex).toBeDefined();
+    expect(updatedDispute.decision_signature_b58).toBeDefined();
+    expect(updatedDispute.arbiter_pubkey_b58).toBeDefined();
+
+    // Check decision file exists
+    expect(fs.existsSync(updatedDispute.decision_path!)).toBe(true);
+
+    // Load and verify decision
+    const signedDecision = loadDecisionFromPath(updatedDispute.decision_path!);
+    expect(signedDecision).not.toBeNull();
+    expect(signedDecision?.decision.dispute_id).toBe(dispute.dispute_id);
+    expect(signedDecision?.decision.outcome).toBe("REFUND_FULL");
+    expect(signedDecision?.decision.refund_amount).toBe(0.1);
+    expect(signedDecision?.arbiter_pubkey_b58).toBe(updatedDispute.arbiter_pubkey_b58);
+    expect(signedDecision?.decision_hash_hex).toBe(updatedDispute.decision_hash_hex);
+
+    // Verify decision signature
+    expect(verifyDecision(signedDecision!)).toBe(true);
+  });
+
+  it("C3: resolveDispute without arbiterKeyPair does not create decision (backward compatible)", async () => {
+    const buyer = createKeyPair();
+    const seller = createKeyPair();
+    const policy = createDefaultPolicy();
+    policy.base.disputes = {
+      enabled: true,
+      window_ms: 100000,
+      allow_partial: true,
+      max_refund_pct: 1.0,
+    };
+    const compiled = compilePolicy(policy);
+    const settlement = new MockSettlementProvider();
+    settlement.setBalance(seller.id, 1.0);
+    settlement.setBalance(buyer.id, 0.0);
+
+    const receipt = createReceipt({
+      intent_id: "test-intent-no-decision",
+      buyer_agent_id: buyer.id,
+      seller_agent_id: seller.id,
+      agreed_price: 0.1,
+      paid_amount: 0.1,
+      fulfilled: true,
+      timestamp_ms: Date.now(),
+    });
+
+    // Open dispute
+    const dispute = openDispute({
+      receipt,
+      reason: "Test dispute without decision",
+      now: Date.now(),
+      policy: compiled.base as any,
+      disputeDir: tempDir,
+    });
+
+    // Resolve without arbiter keypair
+    const result = await resolveDispute({
+      dispute_id: dispute.dispute_id,
+      outcome: "REFUND_FULL",
+      now: Date.now(),
+      policy: compiled.base as any,
+      settlementProvider: settlement,
+      receipt,
+      disputeDir: tempDir,
+      // No arbiterKeyPair provided
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.record).toBeDefined();
+
+    // Check dispute record does NOT have decision fields
+    const updatedDispute = result.record!;
+    expect(updatedDispute.decision_path).toBeUndefined();
+    expect(updatedDispute.decision_hash_hex).toBeUndefined();
+    expect(updatedDispute.decision_signature_b58).toBeUndefined();
+    expect(updatedDispute.arbiter_pubkey_b58).toBeUndefined();
   });
 });
 

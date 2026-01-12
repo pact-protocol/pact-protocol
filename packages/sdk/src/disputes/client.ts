@@ -13,6 +13,8 @@ import type { SettlementProvider } from "../settlement/provider";
 import type { DisputeRecord, DisputeOutcome } from "./types";
 import type { TranscriptV1 } from "../transcript/types";
 import { createDispute, loadDispute, updateDispute } from "./store";
+import { signDecision, type DisputeDecision, type ArbiterKeyPair } from "./decision";
+import { writeDecision, getDecisionDir } from "./decisionStore";
 
 export interface OpenDisputeParams {
   receipt: Receipt;
@@ -38,6 +40,7 @@ export interface ResolveDisputeParams {
   receipt: Receipt; // v1.6.8+: Receipt must include buyer/seller ids and paid_amount (C2)
   disputeDir?: string;
   transcriptPath?: string; // v1.6.8+: Optional transcript path for dispute events (C2)
+  arbiterKeyPair?: ArbiterKeyPair; // C3: Optional arbiter keypair for signing decision
 }
 
 /**
@@ -105,7 +108,7 @@ export function openDispute(params: OpenDisputeParams): DisputeRecord {
  * Executes refund via settlement provider and updates dispute record.
  */
 export async function resolveDispute(params: ResolveDisputeParams): Promise<{ ok: boolean; record?: DisputeRecord; code?: string; reason?: string }> {
-  const { dispute_id, outcome, refund_amount, notes, now, policy, settlementProvider, receipt, disputeDir, transcriptPath } = params;
+  const { dispute_id, outcome, refund_amount, notes, now, policy, settlementProvider, receipt, disputeDir, transcriptPath, arbiterKeyPair } = params;
   
   // Load dispute
   const dispute = loadDispute(dispute_id, disputeDir);
@@ -246,6 +249,40 @@ export async function resolveDispute(params: ResolveDisputeParams): Promise<{ ok
     actualRefundAmount = refundResult.refunded_amount;
   }
   
+  // C3: Create and sign decision if arbiterKeyPair provided
+  if (arbiterKeyPair) {
+    const decisionId = `decision-${dispute.dispute_id}-${randomBytes(4).toString("hex")}`;
+    const decision: DisputeDecision = {
+      decision_id: decisionId,
+      dispute_id: dispute.dispute_id,
+      receipt_id: dispute.receipt_id,
+      intent_id: dispute.intent_id,
+      buyer_agent_id: dispute.buyer_agent_id,
+      seller_agent_id: dispute.seller_agent_id,
+      outcome: outcome,
+      refund_amount: actualRefundAmount,
+      issued_at_ms: now,
+      notes: notes,
+      policy_snapshot: {
+        max_refund_pct: policy.base.disputes?.max_refund_pct,
+        allow_partial: policy.base.disputes?.allow_partial,
+      },
+    };
+    
+    // Sign decision
+    const signedDecision = signDecision(decision, arbiterKeyPair);
+    
+    // Write decision to disk
+    const decisionDir = disputeDir ? path.join(path.dirname(disputeDir), "decisions") : undefined;
+    const decisionPath = writeDecision(signedDecision, decisionDir);
+    
+    // Link decision to dispute record
+    dispute.decision_path = decisionPath;
+    dispute.decision_hash_hex = signedDecision.decision_hash_hex;
+    dispute.decision_signature_b58 = signedDecision.signature_b58;
+    dispute.arbiter_pubkey_b58 = signedDecision.arbiter_pubkey_b58;
+  }
+  
   // Update dispute record
   dispute.status = "RESOLVED";
   dispute.outcome = outcome;
@@ -269,14 +306,24 @@ export async function resolveDispute(params: ResolveDisputeParams): Promise<{ ok
       }
       
       // Add dispute event
-      transcript.dispute_events.push({
+      const disputeEvent: any = {
         ts_ms: now,
         dispute_id: dispute.dispute_id,
         outcome: outcome,
         refund_amount: actualRefundAmount,
         settlement_provider: dispute.settlement_provider,
         status: "resolved",
-      });
+      };
+      
+      // C3: Add decision fields if present
+      if (dispute.decision_hash_hex) {
+        disputeEvent.decision_hash_hex = dispute.decision_hash_hex;
+      }
+      if (dispute.arbiter_pubkey_b58) {
+        disputeEvent.arbiter_pubkey_b58 = dispute.arbiter_pubkey_b58;
+      }
+      
+      transcript.dispute_events.push(disputeEvent);
       
       // Write updated transcript
       fs.writeFileSync(transcriptPath, JSON.stringify(transcript, null, 2), "utf-8");
@@ -307,6 +354,8 @@ export async function resolveDispute(params: ResolveDisputeParams): Promise<{ ok
           refund_amount: actualRefundAmount,
           settlement_provider: dispute.settlement_provider,
           status: "resolved",
+          ...(dispute.decision_hash_hex ? { decision_hash_hex: dispute.decision_hash_hex } : {}),
+          ...(dispute.arbiter_pubkey_b58 ? { arbiter_pubkey_b58: dispute.arbiter_pubkey_b58 } : {}),
         }],
       };
       
