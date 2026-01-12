@@ -1901,7 +1901,7 @@ export async function acquire(params: {
     );
   }
 
-  if (chosenMode === "hash_reveal") {
+      if (chosenMode === "hash_reveal") {
     // Hash-reveal settlement
     const commitNow = nowFunction();
     const payload = JSON.stringify({ data: "delivered", scope: input.scope });
@@ -1911,7 +1911,7 @@ export async function acquire(params: {
     let commitHash: string;
     let revealOk: boolean = false;
     
-    if (selectedProvider.endpoint) {
+      if (selectedProvider.endpoint) {
       // HTTP provider: use /commit and /reveal endpoints (signed envelopes)
       try {
         // Call /commit endpoint to get signed COMMIT envelope
@@ -2156,7 +2156,7 @@ export async function acquire(params: {
             // Retryable - continue to next candidate (will be caught by outer catch)
             throw error; // Re-throw to be caught by outer catch
       }
-    } else {
+      } else {
       // Local provider: generate commit/reveal locally
       commitHash = computeCommitHash(payloadB64, nonce);
 
@@ -2262,13 +2262,43 @@ export async function acquire(params: {
         // If retryable, continue
         throw new Error(`REVEAL failed: ${revealResult.reason || revealResult.code}`); // Will be caught by outer catch
       }
-    }
+      }
 
-    receipt = session.getReceipt() ?? null;
-  } else {
-    // Streaming settlement
-    const streamingPolicy = compiled.base.settlement.streaming;
-    if (!streamingPolicy) {
+      receipt = session.getReceipt() ?? null;
+      }
+
+      if (chosenMode === "streaming") {
+        // Streaming settlement
+        const streamingPolicy = compiled.base.settlement.streaming;
+        
+        // Declare variables for streaming settlement
+        let streamingReceipt: Receipt | null = null;
+        let streamingSuccess = false;
+        let attemptFailed = false;
+        let attemptFailureCode: string | undefined = undefined;
+        let attemptFailureReason: string | undefined = undefined;
+        
+        // Use selectedProvider for streaming (same as hash_reveal)
+        const streamingProvider = selectedProvider;
+        const streamingProviderPubkey = selectedProviderPubkey;
+    
+        // v1.6.9+: Track cumulative streaming state across attempts (B4)
+        let streamingTotalPaidAmount = 0;
+        let streamingTotalTicks = 0;
+        let streamingTotalChunks = 0;
+        const streamingAttempts: Array<{
+          idx: number;
+          provider_pubkey: string;
+          provider_id?: string;
+          settlement_provider?: string;
+          ticks_paid: number;
+          paid_amount: number;
+          outcome: "success" | "failed";
+          failure_code?: string;
+          failure_reason?: string;
+        }> = [];
+        let streamingAttemptIdx = 0;
+        if (!streamingPolicy) {
       // STREAMING_NOT_CONFIGURED is non-retryable (policy issue)
       const action = handleAttemptFailure("STREAMING_NOT_CONFIGURED", "Streaming policy not configured", attemptEntry);
       if (action === "return") {
@@ -2322,7 +2352,7 @@ export async function acquire(params: {
         }
         // Re-throw other errors
         throw error;
-      }
+    }
 
     const totalBudget = agreement.agreed_price;
     const tickMs = streamingPolicy.tick_ms;
@@ -2333,7 +2363,7 @@ export async function acquire(params: {
     const streamNowFn = () => streamNow; // THIS is the clock exchange will use
 
     const exchange = new StreamingExchange({
-          settlement: attemptSettlement, // Use attemptSettlement instead of settlement
+      settlement: attemptSettlement, // Use attemptSettlement instead of settlement
       policy: compiled,
       now: streamNowFn, // Use dedicated streaming clock, not nowFunction
       buyerId,
@@ -2369,17 +2399,18 @@ export async function acquire(params: {
           throw error;
         }
 
-    for (let i = 1; i <= plannedTicks; i++) {
+      for (let i = 1; i <= plannedTicks; i++) {
       streamNow += tickMs + 5; // Always advance the streaming clock
       const tickNow = streamNow;
 
-      // Fetch exactly one chunk per tick: seq = i - 1
-      const chunkSeq = i - 1;
-      
-      if (selectedProvider.endpoint) {
+        // v1.6.9+: Calculate chunk sequence accounting for previous attempts (B4)
+        // Chunk sequence should continue from where previous attempts left off
+        const chunkSeq = streamingTotalChunks + (i - 1);
+        
+        if (streamingProvider.endpoint) {
         // HTTP provider: fetch signed chunk envelope
         try {
-          const chunkResponse = await fetchStreamChunk(selectedProvider.endpoint, {
+          const chunkResponse = await fetchStreamChunk(streamingProvider.endpoint, {
             intent_id: intentId,
             seq: chunkSeq,
             sent_at_ms: tickNow,
@@ -2387,115 +2418,53 @@ export async function acquire(params: {
           
           // Verify envelope signature (synchronous)
           if (!verifyEnvelope(chunkResponse.envelope)) {
-                // PROVIDER_SIGNATURE_INVALID is typically retryable (provider-specific issue)
-                const action = handleAttemptFailure("PROVIDER_SIGNATURE_INVALID", "Invalid STREAM_CHUNK envelope signature", attemptEntry);
-                if (action === "return") {
-            if (explain) {
-              pushDecision(
-                selectedProvider,
-                "settlement",
-                false,
-                "PROVIDER_SIGNATURE_INVALID",
-                "Invalid STREAM_CHUNK envelope signature"
-              );
-            }
-            return {
-              ok: false,
-              plan: {
-                ...plan,
-                overrideActive,
-              },
-              code: "FAILED_IDENTITY",
-              reason: "Invalid STREAM_CHUNK envelope signature",
-              offers_eligible: evaluations.length,
-              ...(explain ? { explain } : {}),
-            };
-                }
-                // Retryable - break out of tick loop and continue to next candidate
-                throw new Error("PROVIDER_SIGNATURE_INVALID: Invalid STREAM_CHUNK envelope signature"); // Will be caught by outer catch
+            // PROVIDER_SIGNATURE_INVALID is retryable
+            attemptFailed = true;
+            attemptFailureCode = "PROVIDER_SIGNATURE_INVALID";
+            attemptFailureReason = "Invalid STREAM_CHUNK envelope signature";
+            break; // Break out of tick loop
           }
           
           // Parse envelope (async)
           const parsed = await parseEnvelope(chunkResponse.envelope);
           
           // Know Your Agent: verify signer matches provider pubkey
-          const chunkSignerMatches = parsed.signer_public_key_b58 === selectedProviderPubkey;
+          const chunkSignerMatches = parsed.signer_public_key_b58 === streamingProviderPubkey;
           if (!chunkSignerMatches) {
-                // PROVIDER_SIGNER_MISMATCH is typically retryable (provider misconfiguration)
-                const action = handleAttemptFailure("PROVIDER_SIGNER_MISMATCH", "STREAM_CHUNK envelope signer doesn't match provider pubkey", attemptEntry);
-                if (action === "return") {
-            if (explain) {
-              pushDecision(
-                selectedProvider,
-                "settlement",
-                false,
-                "PROVIDER_SIGNER_MISMATCH",
-                `STREAM_CHUNK envelope signer ${parsed.signer_public_key_b58.substring(0, 8)} doesn't match provider ${selectedProviderPubkey.substring(0, 8)}`
-              );
-            }
-            return {
-              ok: false,
-              plan: {
-                ...plan,
-                overrideActive,
-              },
-              code: "PROVIDER_SIGNER_MISMATCH",
-              reason: "STREAM_CHUNK envelope signer doesn't match provider pubkey",
-              offers_eligible: evaluations.length,
-              ...(explain ? { explain } : {}),
-            };
-                }
-                // Retryable - break out of tick loop and continue to next candidate
-                throw new Error("PROVIDER_SIGNER_MISMATCH: STREAM_CHUNK envelope signer doesn't match provider pubkey"); // Will be caught by outer catch
+            // PROVIDER_SIGNER_MISMATCH is retryable
+            attemptFailed = true;
+            attemptFailureCode = "PROVIDER_SIGNER_MISMATCH";
+            attemptFailureReason = "STREAM_CHUNK envelope signer doesn't match provider pubkey";
+            break; // Break out of tick loop
           }
           
           // Type assertion: we know this is a STREAM_CHUNK from the HTTP endpoint
           const chunkMsg = parsed.message as any;
           if (chunkMsg.type !== "STREAM_CHUNK") {
-                // INVALID_MESSAGE_TYPE is typically retryable (provider issue)
-                const action = handleAttemptFailure("INVALID_MESSAGE_TYPE", "Expected STREAM_CHUNK message", attemptEntry);
-                if (action === "return") {
-            return {
-              ok: false,
-              plan: {
-                ...plan,
-                overrideActive,
-              },
-              code: "INVALID_MESSAGE_TYPE",
-              reason: "Expected STREAM_CHUNK message",
-                    explain: explain || undefined,
-            };
-                }
-                // Retryable - break out of tick loop and continue to next candidate
-                throw new Error("INVALID_MESSAGE_TYPE: Expected STREAM_CHUNK message"); // Will be caught by outer catch
+            // INVALID_MESSAGE_TYPE is retryable
+            attemptFailed = true;
+            attemptFailureCode = "INVALID_MESSAGE_TYPE";
+            attemptFailureReason = "Expected STREAM_CHUNK message";
+            break; // Break out of tick loop
           }
           
           // Call onChunk with the verified chunk message
           exchange.onChunk(chunkMsg);
         } catch (error: any) {
-              // HTTP_STREAMING_ERROR is retryable (network/provider issue)
-              const errorMsg = error?.message || String(error);
-              // Check if this is already a handled error (from above checks)
-              if (errorMsg.includes("PROVIDER_SIGNATURE_INVALID") || errorMsg.includes("PROVIDER_SIGNER_MISMATCH") || errorMsg.includes("INVALID_MESSAGE_TYPE")) {
-                // Re-throw to be caught by outer catch
-                throw error;
-              }
-              // Otherwise, treat as HTTP_STREAMING_ERROR
-              const action = handleAttemptFailure("HTTP_STREAMING_ERROR", `HTTP streaming error: ${errorMsg}`, attemptEntry);
-              if (action === "return") {
-          return {
-            ok: false,
-            plan: {
-              ...plan,
-              overrideActive,
-            },
-            code: "HTTP_STREAMING_ERROR",
-                  reason: `HTTP streaming error: ${errorMsg}`,
-                  explain: explain || undefined,
-          };
-              }
-              // Retryable - continue to next candidate
-              throw new Error(`HTTP_STREAMING_ERROR: ${errorMsg}`); // Will be caught by outer catch
+          // HTTP_STREAMING_ERROR is retryable (network/provider issue)
+          const errorMsg = error?.message || String(error);
+          // Check if this is already a handled error (from above checks)
+          if (errorMsg.includes("PROVIDER_SIGNATURE_INVALID") || errorMsg.includes("PROVIDER_SIGNER_MISMATCH") || errorMsg.includes("INVALID_MESSAGE_TYPE")) {
+            attemptFailed = true;
+            attemptFailureCode = errorMsg.split(":")[0] || "HTTP_STREAMING_ERROR";
+            attemptFailureReason = errorMsg;
+            break; // Break out of tick loop
+          }
+          // Otherwise, treat as HTTP_STREAMING_ERROR
+          attemptFailed = true;
+          attemptFailureCode = "HTTP_STREAMING_ERROR";
+          attemptFailureReason = `HTTP streaming error: ${errorMsg}`;
+          break; // Break out of tick loop
         }
       } else {
         // Local provider: generate chunk locally
@@ -2510,147 +2479,350 @@ export async function acquire(params: {
         });
       }
 
-      // Then call tick() to process payment
-      let tickResult;
-      try {
-        tickResult = exchange.tick();
-      } catch (error: any) {
-        // Handle settlement provider errors from exchange.tick()
-        const errorMsg = error?.message || String(error);
-        if (errorMsg.includes("NotImplemented") || errorMsg.includes("ExternalSettlementProvider")) {
-              const failureCode = "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED";
-              const failureReason = `Settlement operation (exchange.tick) failed: ${errorMsg}`;
-              
-              const action = handleAttemptFailure(failureCode, failureReason, attemptEntry);
-              if (action === "return") {
-          return {
-            ok: false,
-                  code: failureCode,
-                  reason: failureReason,
-            explain: explain || undefined,
-          };
-              }
-              // Retryable - break out of tick loop and continue to next candidate
-              throw error; // Re-throw to be caught by outer catch
+        // Then call tick() to process payment
+        let tickResult;
+        try {
+          tickResult = exchange.tick();
+        } catch (error: any) {
+          // Handle settlement provider errors from exchange.tick()
+          const errorMsg = error?.message || String(error);
+          if (errorMsg.includes("NotImplemented") || errorMsg.includes("ExternalSettlementProvider")) {
+            attemptFailed = true;
+            attemptFailureCode = "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED";
+            attemptFailureReason = `Settlement operation (exchange.tick) failed: ${errorMsg}`;
+            break; // Break out of tick loop
+          }
+          // Re-throw other errors
+          throw error;
         }
-        // Re-throw other errors
-        throw error;
-      }
-      const state = exchange.getState();
+        
+        // v1.6.9+: Check for tick failure (B4)
+        if (!tickResult.ok) {
+          const failureCode = tickResult.code || "SETTLEMENT_FAILED";
+          const failureReason = tickResult.reason || "Stream tick failed";
+          
+          // Check if retryable
+          if (isRetryableFailure(failureCode)) {
+            attemptFailed = true;
+            attemptFailureCode = failureCode;
+            attemptFailureReason = failureReason;
+            break; // Break out of tick loop to continue with next candidate
+          } else {
+            // Non-retryable - fail overall
+            attemptFailed = true;
+            attemptFailureCode = failureCode;
+            attemptFailureReason = failureReason;
+            break; // Break out of tick loop
+          }
+        }
+        
+        // v1.6.9+: Update cumulative state from exchange state (B4)
+        const state = exchange.getState();
+        streamingTotalPaidAmount = state.paid_amount; // Exchange tracks cumulative
+        streamingTotalTicks = state.ticks;
+        streamingTotalChunks = state.chunks;
 
-      // Check for receipt (completion or failure) - natural exit
-      if (tickResult.receipt) {
-        receipt = tickResult.receipt;
-        break;
-      }
+        // Check for receipt (completion or failure) - natural exit
+        if (tickResult.receipt) {
+          const epsilon = 1e-12; // Small epsilon for floating point comparison
+          // If receipt indicates completion, we're done
+          if (tickResult.receipt.fulfilled && (tickResult.receipt.paid_amount || 0) >= totalBudget - epsilon) {
+            streamingReceipt = tickResult.receipt;
+            streamingSuccess = true;
+            // Record successful attempt
+            streamingAttempts.push({
+              idx: streamingAttemptIdx,
+              provider_pubkey: streamingProviderPubkey,
+              provider_id: selectedProvider.provider_id,
+              settlement_provider: plan.settlement,
+              ticks_paid: state.ticks,
+              paid_amount: state.paid_amount,
+              outcome: "success",
+            });
+            // Assign receipt and let execution continue to shared success path
+            receipt = streamingReceipt;
+            // Don't break - let execution continue to shared success path
+          }
+          // If receipt indicates failure, check if retryable
+          if (!tickResult.receipt.fulfilled && tickResult.receipt.failure_code) {
+            const failureCode = tickResult.receipt.failure_code;
+            if (isRetryableFailure(failureCode)) {
+              attemptFailed = true;
+              attemptFailureCode = failureCode;
+              attemptFailureReason = `Stream failed: ${failureCode}`;
+              break; // Break out of tick loop to continue with next candidate
+            } else {
+              // Non-retryable - fail overall
+              streamingReceipt = tickResult.receipt;
+              // Assign receipt before breaking out of loop
+              receipt = streamingReceipt;
+              break; // Break out of streaming attempt loop
+            }
+          }
+        }
 
-      // Only stop early if buyerStopAfterTicks is explicitly set and we've reached it
-      if (typeof input.buyerStopAfterTicks === "number" && i === input.buyerStopAfterTicks) {
-        receipt = exchange.stop("buyer", "Buyer requested stop");
-        break;
-      }
-    }
-
-    // If no receipt yet, create one based on final state
-    if (!receipt) {
-      const state = exchange.getState();
-      const eps = 1e-12;
-
-      if (state.paid_amount + eps >= totalBudget) {
-        // Budget exhausted - fulfilled receipt
-        receipt = createReceipt({
-          intent_id: intentId,
-          buyer_agent_id: buyerId,
-          seller_agent_id: selectedProviderPubkey,
-          agreed_price: totalBudget,
-          fulfilled: true,
-          timestamp_ms: nowFunction(),
-          paid_amount: round8(state.paid_amount),
-          ticks: state.ticks,
-          chunks: state.chunks,
+        // Only stop early if buyerStopAfterTicks is explicitly set and we've reached it
+        if (typeof input.buyerStopAfterTicks === "number" && (streamingTotalTicks + (i - 1)) >= input.buyerStopAfterTicks) {
+          const finalState = exchange.getState();
+          streamingTotalPaidAmount = finalState.paid_amount;
+          streamingTotalTicks = finalState.ticks;
+          streamingTotalChunks = finalState.chunks;
+          streamingReceipt = exchange.stop("buyer", "Buyer requested stop");
+          streamingSuccess = true; // Buyer stop is considered success
+          // Record successful attempt (buyer stopped)
+          streamingAttempts.push({
+            idx: streamingAttemptIdx,
+            provider_pubkey: streamingProviderPubkey,
+            provider_id: selectedProvider.provider_id,
+            settlement_provider: plan.settlement,
+            ticks_paid: finalState.ticks,
+            paid_amount: finalState.paid_amount,
+            outcome: "success",
+          });
+          // Assign receipt and let execution continue to shared success path
+          receipt = streamingReceipt;
+          // Clear attemptFailed flag since buyer stop is a success
+          attemptFailed = false;
+          // Break out of tick loop to skip attemptFailed check
+          break;
+        }
+      } // End of tick loop
+      
+      // v1.6.9+: Handle attempt failure or completion (B4)
+      if (attemptFailed) {
+        // Capture attempt metrics
+        const finalState = exchange.getState();
+        const attemptStartPaid = 0; // For single attempt, start from 0
+        const attemptStartTicks = 0; // For single attempt, start from 0
+        const attemptStartChunks = 0; // For single attempt, start from 0
+        const attemptPaid = finalState.paid_amount - attemptStartPaid;
+        const attemptTicks = finalState.ticks - attemptStartTicks;
+        const attemptChunks = finalState.chunks - attemptStartChunks;
+        
+        // Update cumulative state
+        streamingTotalPaidAmount = finalState.paid_amount;
+        streamingTotalTicks = finalState.ticks;
+        streamingTotalChunks = finalState.chunks;
+        
+        // Record failed attempt
+        streamingAttempts.push({
+          idx: streamingAttemptIdx,
+          provider_pubkey: streamingProviderPubkey,
+          provider_id: selectedProvider.provider_id,
+          settlement_provider: plan.settlement,
+          ticks_paid: attemptTicks,
+          paid_amount: attemptPaid,
+          outcome: "failed",
+          failure_code: attemptFailureCode,
+          failure_reason: attemptFailureReason,
         });
+        
+        // Check if retryable
+        if (attemptFailureCode && isRetryableFailure(attemptFailureCode)) {
+          // Retryable - continue to next candidate
+          continue;
+        } else {
+          // Non-retryable - fail overall
+          streamingReceipt = createReceipt({
+            intent_id: intentId,
+            buyer_agent_id: buyerId,
+            seller_agent_id: streamingProviderPubkey,
+            agreed_price: totalBudget,
+            fulfilled: false,
+            timestamp_ms: nowFunction(),
+            paid_amount: round8(streamingTotalPaidAmount),
+            ticks: streamingTotalTicks,
+            chunks: streamingTotalChunks,
+            failure_code: attemptFailureCode,
+          });
+          // Assign receipt before breaking out of loop
+          receipt = streamingReceipt;
+          break; // Break out of streaming attempt loop
+        }
       } else {
-        // Stream completed naturally (all ticks processed) - fulfilled receipt
-        receipt = createReceipt({
-          intent_id: intentId,
-          buyer_agent_id: buyerId,
-          seller_agent_id: selectedProviderPubkey,
-          agreed_price: round8(state.paid_amount), // Use actual paid amount
-          fulfilled: true,
-          timestamp_ms: nowFunction(),
-          paid_amount: round8(state.paid_amount),
-          ticks: state.ticks,
-          chunks: state.chunks,
-        });
+        // Attempt succeeded - check if we're done
+        // If buyer stop already set a receipt, skip budget check and continue to success path
+        if (streamingReceipt && streamingSuccess && receipt) {
+          // Buyer stop or other early success - receipt already assigned, continue to shared success path
+          // Continue to shared success path (receipt already assigned)
+          // No need to check budget or create receipt - already done
+        } else {
+          // State already updated in tick loop above
+          const finalState = exchange.getState();
+          
+          // Check if budget is exhausted
+          const epsilon = 1e-12; // Small epsilon for floating point comparison
+          if (streamingTotalPaidAmount >= totalBudget - epsilon) {
+          // All budget paid - create final receipt
+          streamingReceipt = createReceipt({
+            intent_id: intentId,
+            buyer_agent_id: buyerId,
+            seller_agent_id: streamingProviderPubkey,
+            agreed_price: totalBudget,
+            fulfilled: true,
+            timestamp_ms: nowFunction(),
+            paid_amount: round8(streamingTotalPaidAmount),
+            ticks: streamingTotalTicks,
+            chunks: streamingTotalChunks,
+          });
+          streamingSuccess = true;
+          // Record successful attempt
+          streamingAttempts.push({
+            idx: streamingAttemptIdx,
+            provider_pubkey: streamingProviderPubkey,
+            provider_id: selectedProvider.provider_id,
+            settlement_provider: plan.settlement,
+            ticks_paid: finalState.ticks,
+            paid_amount: finalState.paid_amount,
+            outcome: "success",
+          });
+          // Assign receipt and let execution continue to shared success path
+          receipt = streamingReceipt;
+          // Don't break - let execution continue to shared success path
+        } else {
+          // Partial success - record attempt and continue to next candidate if available
+          streamingAttempts.push({
+            idx: streamingAttemptIdx,
+            provider_pubkey: streamingProviderPubkey,
+            provider_id: selectedProvider.provider_id,
+            settlement_provider: plan.settlement,
+            ticks_paid: finalState.ticks,
+            paid_amount: finalState.paid_amount,
+            outcome: "success", // Partial success - will continue with next candidate
+          });
+          // Continue to next candidate to complete remaining budget
+          continue;
           }
+        }
       }
-    }
+    
+        // v1.6.9+: Use streaming receipt if available (B4)
+        if (streamingReceipt) {
+          receipt = streamingReceipt;
+        } else if (!streamingSuccess && streamingTotalPaidAmount > 0) {
+          // All attempts failed but some amount was paid - create failure receipt
+          receipt = createReceipt({
+            intent_id: intentId,
+            buyer_agent_id: buyerId,
+            seller_agent_id: selectedProviderPubkey,
+            agreed_price: totalBudget,
+            fulfilled: false,
+            timestamp_ms: nowFunction(),
+            paid_amount: round8(streamingTotalPaidAmount),
+            ticks: streamingTotalTicks,
+            chunks: streamingTotalChunks,
+            failure_code: streamingAttempts[streamingAttempts.length - 1]?.failure_code || "SETTLEMENT_FAILED",
+          });
+        } else if (!streamingReceipt) {
+          // No receipt yet - create one based on final cumulative state
+          const eps = 1e-12;
 
-    if (agreement) {
-      (agreement as any).status = "COMPLETED";
-  }
-
-      if (!receipt) {
-        // NO_RECEIPT is typically non-retryable (protocol error), but check anyway
-        const action = handleAttemptFailure("NO_RECEIPT", "No receipt generated after settlement", attemptEntry);
-        if (action === "return") {
-          if (explain) {
-            explain.regime = plan.regime;
-            explain.settlement = chosenMode;
-            explain.fanout = plan.fanout;
-            pushDecision(
-              selectedProvider,
-              "settlement",
-              false,
-              "SETTLEMENT_FAILED",
-              "No receipt generated after settlement"
-            );
+          if (streamingTotalPaidAmount + eps >= totalBudget) {
+            // Budget exhausted - fulfilled receipt
+            receipt = createReceipt({
+              intent_id: intentId,
+              buyer_agent_id: buyerId,
+              seller_agent_id: selectedProviderPubkey,
+              agreed_price: totalBudget,
+              fulfilled: true,
+              timestamp_ms: nowFunction(),
+              paid_amount: round8(streamingTotalPaidAmount),
+              ticks: streamingTotalTicks,
+              chunks: streamingTotalChunks,
+            });
+          } else {
+            // Stream completed naturally (all ticks processed) - fulfilled receipt
+            receipt = createReceipt({
+              intent_id: intentId,
+              buyer_agent_id: buyerId,
+              seller_agent_id: selectedProviderPubkey,
+              agreed_price: round8(streamingTotalPaidAmount), // Use actual paid amount
+              fulfilled: true,
+              timestamp_ms: nowFunction(),
+              paid_amount: round8(streamingTotalPaidAmount),
+              ticks: streamingTotalTicks,
+              chunks: streamingTotalChunks,
+            });
           }
-          
-          // Save transcript for NO_RECEIPT failure (v1.7.2+)
-          const transcriptPath = await saveTranscriptOnEarlyReturn(
-            intentId,
-            "NO_RECEIPT",
-            "No receipt generated after settlement",
-            attemptEntry
-          );
-          
-          return {
-            ok: false,
-            plan: {
-              ...plan,
-              overrideActive,
-            },
-            code: "NO_RECEIPT",
-            reason: "No receipt generated after settlement",
-            offers_eligible: evaluations.length,
-            ...(explain ? { explain } : {}),
-            ...(transcriptPath ? { transcriptPath } : {}),
+        }
+    
+        // v1.6.9+: Record streaming attempts and summary in transcript (B4)
+        if (transcriptData) {
+          transcriptData.streaming_attempts = streamingAttempts;
+          transcriptData.streaming_summary = {
+            total_ticks: streamingTotalTicks,
+            total_paid_amount: streamingTotalPaidAmount,
+            attempts_used: streamingAttempts.length,
           };
+        }
+
+        if (agreement) {
+          (agreement as any).status = "COMPLETED";
+        }
+      } // End of streaming block
+
+      // Shared success path for both hash_reveal and streaming modes
+      if (!receipt) {
+      // NO_RECEIPT is typically non-retryable (protocol error), but check anyway
+      const action = handleAttemptFailure("NO_RECEIPT", "No receipt generated after settlement", attemptEntry);
+        if (action === "return") {
+        if (explain) {
+          explain.regime = plan.regime;
+          explain.settlement = chosenMode;
+          explain.fanout = plan.fanout;
+          pushDecision(
+            selectedProvider,
+            "settlement",
+            false,
+            "SETTLEMENT_FAILED",
+            "No receipt generated after settlement"
+          );
+        }
+        
+        // Save transcript for NO_RECEIPT failure (v1.7.2+)
+        const transcriptPath = await saveTranscriptOnEarlyReturn(
+          intentId,
+          "NO_RECEIPT",
+          "No receipt generated after settlement",
+          attemptEntry
+        );
+        
+        return {
+          ok: false,
+          plan: {
+            ...plan,
+            overrideActive,
+          },
+          code: "NO_RECEIPT",
+          reason: "No receipt generated after settlement",
+          offers_eligible: evaluations.length,
+          ...(explain ? { explain } : {}),
+          ...(transcriptPath ? { transcriptPath } : {}),
+        };
         }
         continue;
       }
-    
-    // SUCCESS! Record success attempt and break out of loop
-    attemptEntry.outcome = "success";
-    attemptEntry.timestamp_ms = nowFunction();
-    settlementAttempts.push(attemptEntry);
-    
-    // Record settlement_attempts in transcript
-    if (transcriptData) {
-      transcriptData.settlement_attempts = settlementAttempts;
-    }
-    
-    // Break out of loop - we succeeded!
-    // Store variables for success return (already defined outside loop)
-    finalReceipt = receipt;
-    finalVerification = verification;
-    finalIntentId = intentId;
-    finalSelectedProvider = selectedProvider;
-    finalSelectedProviderPubkey = selectedProviderPubkey;
-    finalSession = session; // v1.6.7+: Store session for SLA violation tracking (D1)
-    
-    break; // Exit the for loop
+
+        // SUCCESS! Record success attempt and break out of loop
+        attemptEntry.outcome = "success";
+        attemptEntry.timestamp_ms = nowFunction();
+        settlementAttempts.push(attemptEntry);
+        
+        // Record settlement_attempts in transcript
+        if (transcriptData) {
+          transcriptData.settlement_attempts = settlementAttempts;
+        }
+        
+        // Break out of loop - we succeeded!
+        // Store variables for success return (already defined outside loop)
+        finalReceipt = receipt;
+        finalVerification = verification;
+        finalIntentId = intentId;
+        finalSelectedProvider = selectedProvider;
+        finalSelectedProviderPubkey = selectedProviderPubkey;
+        finalSession = session; // v1.6.7+: Store session for SLA violation tracking (D1)
+        
+        break; // Exit the for loop
     } catch (error: any) {
       // Handle errors during attempt (may be retryable failures thrown from nested blocks)
       const errorMsg = error?.message || String(error);

@@ -195,5 +195,25 @@ export type TranscriptV1 = {
     failure_code?: string;
     failure_reason?: string;
   }>;
+  
+  // Streaming attempts (v1.6.9+, B4)
+  streaming_attempts?: Array<{
+    idx: number; // Attempt index (0-based)
+    provider_pubkey: string; // Provider public key (b58)
+    provider_id?: string; // Provider ID from directory
+    settlement_provider?: string; // Settlement provider used ("mock", "stripe_like", "external")
+    ticks_paid: number; // Number of ticks paid in this attempt
+    paid_amount: number; // Amount paid in this attempt
+    outcome: "success" | "failed"; // Outcome of this attempt
+    failure_code?: string; // Failure code if outcome is "failed"
+    failure_reason?: string; // Failure reason if outcome is "failed"
+  }>;
+  
+  // Streaming summary (v1.6.9+, B4)
+  streaming_summary?: {
+    total_ticks: number; // Total ticks paid across all attempts
+    total_paid_amount: number; // Total amount paid across all attempts
+    attempts_used: number; // Number of attempts used
+  };
 };
 

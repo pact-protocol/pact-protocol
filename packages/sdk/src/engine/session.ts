@@ -749,7 +749,7 @@ export class NegotiationSession {
         
         // Split settlement succeeded - continue to create agreement
         // Note: We don't set this.settlementHandle for split settlement (it's per-segment)
-      } else if (this.settlementSupportsLifecycle()) {
+      } else if (this.settlementSupportsLifecycle() && mode === "hash_reveal") {
         // v1.7.2+: Use lifecycle API if supported (for hash_reveal mode), else fallback to legacy methods
         // Use lifecycle API: prepare + commit
         try {

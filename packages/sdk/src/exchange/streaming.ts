@@ -83,27 +83,34 @@ export class StreamingExchange {
     totalBudget: number;
     tickMs: number;
     plannedTicks?: number;
+    // v1.6.9+: Support for remaining budget (B4)
+    remainingBudget?: number; // If provided, use this instead of totalBudget (for fallback)
+    initialPaidAmount?: number; // If provided, start from this paid amount (for fallback)
+    initialTicks?: number; // If provided, start from this tick count (for fallback)
+    initialChunks?: number; // If provided, start from this chunk count (for fallback)
   }) {
-    const { settlement, policy, now, buyerId, sellerId, intentId, totalBudget, tickMs, plannedTicks = 50 } = params;
+    const { settlement, policy, now, buyerId, sellerId, intentId, totalBudget, tickMs, plannedTicks = 50, remainingBudget, initialPaidAmount = 0, initialTicks = 0, initialChunks = 0 } = params;
     
     this.settlement = settlement;
     this.policy = policy;
     this.now = now;
     this.intentId = intentId;
     
-    const ratePerTick = totalBudget / plannedTicks;
+    // v1.6.9+: Use remainingBudget if provided (for fallback), otherwise use totalBudget (B4)
+    const effectiveBudget = remainingBudget !== undefined ? remainingBudget : totalBudget;
+    const ratePerTick = effectiveBudget / plannedTicks;
     
     this.state = {
       buyer: buyerId,
       seller: sellerId,
       rate_per_tick: ratePerTick,
       tick_ms: tickMs,
-      paid_amount: 0,
-      ticks: 0,
-      chunks: 0,
+      paid_amount: initialPaidAmount, // v1.6.9+: Start from initial paid amount (B4)
+      ticks: initialTicks, // v1.6.9+: Start from initial ticks (B4)
+      chunks: initialChunks, // v1.6.9+: Start from initial chunks (B4)
       last_tick_ms: now(),
       start_ms: now(),
-      total_budget: totalBudget,
+      total_budget: effectiveBudget, // v1.6.9+: Use effective budget (remaining or total) (B4)
       status: "ACTIVE",
     };
   }

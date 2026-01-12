@@ -592,6 +592,66 @@ export async function replayTranscript(
     }
   }
 
+  // Verify streaming attempts (v1.6.9+, B4)
+  if (transcript.streaming_summary && transcript.streaming_attempts) {
+    const summary = transcript.streaming_summary;
+    const attempts = transcript.streaming_attempts;
+    const agreedPrice = transcript.receipt?.agreed_price ?? 0;
+    const epsilon = 0.00000001;
+    
+    // Check: sum(streaming_attempts.paid_amount where outcome=="success" + partials) == streaming_summary.total_paid_amount
+    const sumPaidAmounts = attempts
+      .filter(a => a.outcome === "success")
+      .reduce((sum, a) => sum + a.paid_amount, 0);
+    
+    if (Math.abs(sumPaidAmounts - summary.total_paid_amount) > epsilon) {
+      failures.push({
+        code: "STREAMING_ATTEMPTS_INVALID",
+        reason: `Sum of successful attempt paid amounts (${sumPaidAmounts}) does not match total_paid_amount (${summary.total_paid_amount})`,
+        context: {
+          sum_paid_amounts: sumPaidAmounts,
+          total_paid_amount: summary.total_paid_amount,
+        },
+      });
+    }
+    
+    // Check: total_paid_amount <= agreed_price + epsilon
+    if (summary.total_paid_amount > agreedPrice + epsilon) {
+      failures.push({
+        code: "STREAMING_OVERPAY",
+        reason: `Total paid amount (${summary.total_paid_amount}) exceeds agreed price (${agreedPrice})`,
+        context: {
+          total_paid_amount: summary.total_paid_amount,
+          agreed_price: agreedPrice,
+        },
+      });
+    }
+    
+    // Check: ticks monotonic and non-negative
+    let cumulativeTicks = 0;
+    for (const attempt of attempts) {
+      if (attempt.ticks_paid < 0) {
+        failures.push({
+          code: "STREAMING_ATTEMPTS_INVALID",
+          reason: `Attempt ${attempt.idx} has negative ticks_paid: ${attempt.ticks_paid}`,
+          context: { attempt },
+        });
+      }
+      cumulativeTicks += attempt.ticks_paid;
+    }
+    
+    if (Math.abs(cumulativeTicks - summary.total_ticks) > epsilon) {
+      failures.push({
+        code: "STREAMING_ATTEMPTS_INVALID",
+        reason: `Sum of attempt ticks (${cumulativeTicks}) does not match total_ticks (${summary.total_ticks})`,
+        context: {
+          cumulative_ticks: cumulativeTicks,
+          total_ticks: summary.total_ticks,
+        },
+      });
+    }
+  }
+
   return {
     ok: failures.length === 0,
     failures,
