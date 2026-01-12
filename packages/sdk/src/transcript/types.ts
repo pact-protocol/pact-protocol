@@ -215,5 +215,14 @@ export type TranscriptV1 = {
     total_paid_amount: number; // Total amount paid across all attempts
     attempts_used: number; // Number of attempts used
   };
+  
+  // Reconciliation events (v1.6+, D2)
+  reconcile_events?: Array<{
+    ts_ms: number; // Timestamp when reconciliation occurred
+    handle_id: string; // Settlement handle ID that was reconciled
+    from_status: string; // Previous status before reconciliation
+    to_status: string; // New status after reconciliation
+    note?: string; // Optional note about the reconciliation
+  }>;
 };
 

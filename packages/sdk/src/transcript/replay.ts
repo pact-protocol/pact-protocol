@@ -652,6 +652,56 @@ export async function replayTranscript(
     }
   }
 
+  // Verify reconciliation events (v1.6+, D2)
+  if (transcript.reconcile_events && Array.isArray(transcript.reconcile_events)) {
+    const reconcileEvents = transcript.reconcile_events;
+    const lifecycle = transcript.settlement_lifecycle;
+    
+    for (const event of reconcileEvents) {
+      // Check: event references an existing handle_id
+      if (!lifecycle || lifecycle.handle_id !== event.handle_id) {
+        failures.push({
+          code: "RECONCILE_EVENT_INVALID",
+          reason: `Reconcile event references handle_id ${event.handle_id} which does not match settlement_lifecycle.handle_id ${lifecycle?.handle_id || "missing"}`,
+          context: {
+            event_handle_id: event.handle_id,
+            lifecycle_handle_id: lifecycle?.handle_id,
+          },
+        });
+      }
+      
+      // Check: transitions are valid (pending -> committed/failed)
+      if (event.from_status === "pending") {
+        if (event.to_status !== "committed" && event.to_status !== "failed") {
+          failures.push({
+            code: "RECONCILE_EVENT_INVALID_TRANSITION",
+            reason: `Invalid reconcile transition from ${event.from_status} to ${event.to_status}. Expected committed or failed`,
+            context: {
+              handle_id: event.handle_id,
+              from_status: event.from_status,
+              to_status: event.to_status,
+            },
+          });
+        }
+      } else {
+        // Other transitions are allowed but less common
+        // We'll allow them but could add stricter validation if needed
+      }
+      
+      // Check: ts_ms is present and valid
+      if (!event.ts_ms || event.ts_ms <= 0) {
+        failures.push({
+          code: "RECONCILE_EVENT_INVALID",
+          reason: `Reconcile event missing or invalid ts_ms: ${event.ts_ms}`,
+          context: {
+            handle_id: event.handle_id,
+            ts_ms: event.ts_ms,
+          },
+        });
+      }
+    }
+  }
+
   return {
     ok: failures.length === 0,
     failures,

@@ -60,3 +60,6 @@ export * from "./transcript/types";
 export { TranscriptStore } from "./transcript/store";
 export { replayTranscript } from "./transcript/replay";
 export type { ReplayResult, ReplayFailure, ReplayOptions } from "./transcript/replay";
+
+// Reconciliation (v1.6+, D2)
+export * from "./reconcile/index";
