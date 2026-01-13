@@ -9,6 +9,14 @@ Get PACT running in under 10 minutes.
 
 ## Setup (2 minutes)
 
+**Before starting, clean up any previous artifacts:**
+
+```bash
+rm -rf .pact
+```
+
+Then:
+
 ```bash
 # Install dependencies
 pnpm install
@@ -149,9 +157,15 @@ pnpm replay:verify -- .pact/transcripts/intent-123-1234567890-abc123.json
 | **strict** | ERROR | OK |
 | **strict + terminal-only** | SKIP (WARN) | OK |
 
-- **Default mode**: Pending settlements without terminal resolution events are reported as warnings. This is useful for transcripts that are still in progress or for historical transcripts where pending status is expected.
-- **Strict mode** (`--strict`): Pending settlements without resolution are treated as errors. Use this only when you expect all settlements to be resolved (e.g., production verification).
-- **Terminal-only mode** (`--terminal-only`): When used with `--strict`, skips pending transcripts with a warning and verifies only terminal transcripts (committed/failed/aborted). This makes strict mode usable on folders containing both pending snapshots and reconciled snapshots.
+**Understanding Warnings:**
+- `CREDENTIAL_EXPIRED`: Expected for historical transcripts. Credentials expire over time, so this is normal for old transcripts.
+- `SETTLEMENT_PENDING_UNRESOLVED`: Expected for transcripts where settlement is still pending. In default mode, this is a warning (not an error). Use `--strict` only when you expect all settlements to be resolved.
+- `transcript_version missing`: Older transcripts may not have version field. This is a warning, not an error.
+
+**When to use each mode:**
+- **Default mode**: Use for general verification. Warnings are informational.
+- **Strict mode**: Use for production verification when you expect all settlements to be resolved.
+- **Strict + terminal-only**: Use when verifying folders containing both pending snapshots and reconciled snapshots. Skips pending files and verifies only terminal ones.
 
 ## Check Environment
 

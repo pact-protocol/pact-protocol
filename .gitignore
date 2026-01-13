@@ -10,6 +10,9 @@ coverage/
 packages/demo/.pact/
 packages/demo/demo_receipts_*.jsonl
 
+# Local clone folders
+pact_/
+
 # Backup and temp files
 *.backup
 *.tmp

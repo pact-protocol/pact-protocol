@@ -32,13 +32,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       
-      - name: Build packages
-        run: pnpm build
+      - name: Check API surface
+        run: pnpm api:check
       
-      - name: Run tests
-        run: pnpm test
-      
-      - name: Check pack
-        run: pnpm pack:check
+      - name: Run release gate
+        run: pnpm release:gate
 
 

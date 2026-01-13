@@ -30,6 +30,53 @@ If two agents both implement PACT, they can transact **without prior trust**.
 
 ---
 
+## Getting Started
+
+### Clone & Checkout
+
+```bash
+git clone https://github.com/seankkoons-gif/pact_.git
+cd pact_
+git checkout v1.7.0-rc4
+```
+
+### Install & Verify
+
+```bash
+pnpm install
+pnpm build
+pnpm test
+```
+
+### Run Provider (Terminal A)
+
+```bash
+PACT_DEV_IDENTITY_SEED=pact-provider-default-seed-v1 pnpm provider:serve
+```
+
+### Run Examples (Terminal B)
+
+```bash
+pnpm example:happy
+pnpm example:timeout
+pnpm example:dispute
+pnpm example:reconcile
+```
+
+### Verify Transcripts
+
+```bash
+# Default mode: warnings for pending settlements
+pnpm replay:verify -- .pact/transcripts
+
+# Strict mode: verify only terminal transcripts (skip pending)
+pnpm replay:verify --strict --terminal-only -- .pact/transcripts
+```
+
+**If all steps pass, you're synced and ready to go!**
+
+---
+
 ## Public API
 
 PACT v1.7.2+ provides a **stable public API** with guaranteed backward compatibility within the v1 major version. See [V1_CONTRACT.md](./V1_CONTRACT.md) for complete API stability guarantees.
