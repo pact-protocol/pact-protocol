@@ -7,6 +7,39 @@ Get PACT running in under 10 minutes.
 - Node.js >= 20.0.0
 - pnpm >= 9.0.0
 
+## Fresh Clone: 5-Minute Green Check
+
+**For a new developer verifying the repo works:**
+
+```bash
+# Install dependencies
+pnpm install
+
+# Run release gate (builds, tests, packs, runs examples, verifies transcripts)
+pnpm release:gate
+```
+
+**If release:gate passes, you're synced and ready to go! ✅**
+
+**Optional: Run examples manually (requires provider server):**
+
+In **Terminal A**:
+```bash
+PACT_DEV_IDENTITY_SEED=pact-provider-default-seed-v1 pnpm provider:serve
+```
+
+In **Terminal B**:
+```bash
+# Clean up any previous transcripts
+rm -rf .pact
+
+# Run all examples
+pnpm examples:all
+
+# Verify transcripts (strict + terminal-only)
+pnpm replay:verify:strict-terminal
+```
+
 ## Setup (2 minutes)
 
 **Before starting, clean up any previous artifacts:**
@@ -49,6 +82,14 @@ You should see:
 
 ### Step 2: Register Provider
 
+**Option A: Use example registry (recommended for quick start):**
+
+```bash
+cp providers.example.jsonl providers.jsonl
+```
+
+**Option B: Register manually:**
+
 In **Terminal 2**:
 
 ```bash
@@ -62,6 +103,8 @@ pnpm provider:register -- \
 ```
 
 This creates/updates `providers.jsonl` in the repo root.
+
+**See `providers.example.jsonl` for a valid registry entry format.**
 
 ### Step 3: Run Happy Demo
 

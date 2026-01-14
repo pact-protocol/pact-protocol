@@ -37,7 +37,7 @@ If two agents both implement PACT, they can transact **without prior trust**.
 ```bash
 git clone https://github.com/seankkoons-gif/pact_.git
 cd pact_
-git checkout v1.7.0-rc4
+git checkout v1.7.0-rc5
 ```
 
 ### Install & Verify
@@ -106,6 +106,7 @@ pnpm example:reconcile      # Reconcile pending settlement
 ### Documentation
 
 - **[QUICKSTART.md](./docs/QUICKSTART.md)** — Get started in <10 minutes
+- **[DISTRIBUTION.md](./docs/DISTRIBUTION.md)** — How to share, install, and distribute PACT
 - **[V1_CONTRACT.md](./V1_CONTRACT.md)** — API stability guarantees and contract
 - **[PROTOCOL.md](./PROTOCOL.md)** — Protocol semantics and behavior
 - **[examples/](./examples/)** — Working code examples
