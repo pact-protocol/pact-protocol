@@ -170,10 +170,96 @@ describe("acquire", () => {
       
       // Verify wallet block is written to transcript (v2.3+)
       expect(transcript.wallet).toBeDefined();
-      expect(transcript.wallet.provider).toBe("test");
+      expect(transcript.wallet.kind).toBe("test");
+      expect(transcript.wallet.chain).toBe("ethereum");
       expect(transcript.wallet.address).toBe("0x1234567890123456789012345678901234567890");
-      expect(transcript.wallet.chain_id).toBe("ethereum");
-      expect(transcript.wallet.connected_at_ms).toBeDefined();
+      expect(transcript.wallet.used).toBe(true);
+    }
+  });
+
+  it("should write Solana wallet block to transcript with no private key material", async () => {
+    const buyer = createKeyPair();
+    const seller = createKeyPair();
+    const policy = createDefaultPolicy();
+    const settlement = new MockSettlementProvider();
+    settlement.credit(buyer.id, 1.0);
+    settlement.credit(seller.id, 0.1);
+    const store = new ReceiptStore();
+
+    // Create a deterministic Solana keypair for testing
+    const fixedSeed = new Uint8Array([
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+      16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31
+    ]);
+    const solanaKeypair = nacl.sign.keyPair.fromSeed(fixedSeed);
+    const expectedPublicKeyBase58 = bs58.encode(solanaKeypair.publicKey);
+
+    const result = await acquire({
+      input: {
+        intentType: "weather.data",
+        scope: "NYC",
+        constraints: { latency_ms: 50, freshness_sec: 10 },
+        maxPrice: 0.0001,
+        saveTranscript: true,
+        wallet: {
+          provider: "solana-keypair",
+          params: {
+            secretKey: fixedSeed, // Pass seed, not full secretKey
+          },
+        },
+      },
+      buyerKeyPair: buyer.keyPair,
+      sellerKeyPair: seller.keyPair,
+      buyerId: buyer.id,
+      sellerId: seller.id,
+      policy,
+      settlement,
+      store,
+      now: createClock(),
+    });
+
+    if (!result.ok) {
+      throw new Error(`Acquisition failed: ${result.code} - ${result.reason}`);
+    }
+    
+    expect(result.ok).toBe(true);
+    
+    if (result.ok && result.transcriptPath) {
+      const transcriptContent = fs.readFileSync(result.transcriptPath, "utf-8");
+      const transcript = JSON.parse(transcriptContent);
+      
+      // Verify wallet block is written to transcript
+      expect(transcript.wallet).toBeDefined();
+      expect(transcript.wallet.kind).toBe("solana-keypair");
+      expect(transcript.wallet.chain).toBe("solana");
+      expect(transcript.wallet.address).toBe(expectedPublicKeyBase58);
+      expect(transcript.wallet.used).toBe(true);
+      
+      // CRITICAL: Verify no private key material is persisted
+      const transcriptStr = JSON.stringify(transcript);
+      // Check that secretKey is NOT in transcript
+      expect(transcriptStr).not.toContain("secretKey");
+      expect(transcriptStr).not.toContain("privateKey");
+      // Check that the actual secret key bytes are NOT in transcript
+      const secretKeyHex = Array.from(solanaKeypair.secretKey)
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("");
+      expect(transcriptStr).not.toContain(secretKeyHex);
+      // Check that seed is NOT in transcript
+      const seedHex = Array.from(fixedSeed)
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("");
+      expect(transcriptStr).not.toContain(seedHex);
+      
+      // CRITICAL: Verify no signatures are persisted
+      // Signatures are 64 bytes for ed25519, so we check for common signature patterns
+      // We should not see any 64-byte hex strings that look like signatures
+      // (This is a heuristic - we can't detect all possible signature encodings)
+      expect(transcriptStr).not.toMatch(/[a-f0-9]{128}/); // 64 bytes = 128 hex chars
+      
+      // Verify wallet object only contains expected fields
+      const walletKeys = Object.keys(transcript.wallet);
+      expect(walletKeys.sort()).toEqual(["address", "chain", "kind", "used"]);
     }
   });
 

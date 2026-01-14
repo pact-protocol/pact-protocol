@@ -33,6 +33,8 @@ import { AggressiveIfUrgentStrategy } from "../negotiation/aggressive_if_urgent"
 import type { NegotiationResult } from "../negotiation/types";
 import type { WalletAdapter, WalletConnectResult } from "../wallets/types";
 import { ExternalWalletAdapter } from "../wallets/external";
+import { EthersWalletAdapter, type AddressInfo } from "../wallets/ethers";
+import { SolanaWalletAdapter, SOLANA_WALLET_KIND } from "../wallets/solana";
 // Import test adapter only in test environment
 // Use dynamic require to avoid issues in production builds
 let TestWalletAdapter: any;
@@ -69,8 +71,18 @@ export async function acquire(params: {
   const chainId = input.asset?.chain_id;
   
   // Wallet adapter connection (v2.3+)
-  let walletAdapter: WalletAdapter | undefined;
-  let walletConnectResult: WalletConnectResult | undefined;
+  // All wallet adapters now have async getAddress() that returns AddressInfo with kind and chain properties
+  let walletAdapter: any;
+  let walletAddress: string | undefined;
+  let walletKind: string | undefined;
+  let walletChain: string | undefined;
+  
+  // Helper to convert Address (Uint8Array) to hex string
+  const addressToHex = (address: Uint8Array): string => {
+    return "0x" + Array.from(address)
+      .map(b => b.toString(16).padStart(2, "0"))
+      .join("");
+  };
   
   if (input.wallet) {
     const walletProvider = input.wallet.provider ?? "external";
@@ -101,36 +113,82 @@ export async function acquire(params: {
           };
         }
       }
-      walletAdapter = new TestWalletAdapter(
-        input.wallet.params?.address as string | undefined,
-        input.wallet.params?.chain_id as string | undefined
-      );
-    } else if (walletProvider === "external") {
-      walletAdapter = new ExternalWalletAdapter(input.wallet.params);
-    } else {
-      // Unknown provider - default to external
-      walletAdapter = new ExternalWalletAdapter(input.wallet.params);
-    }
-    
-    // Attempt to connect
-    if (walletAdapter) {
+      // TestWalletAdapter now takes hex string address and converts to Uint8Array internally
+      const testAddress = (input.wallet.params?.address as string | undefined) || "0x1234567890123456789012345678901234567890";
+      const testChain = (input.wallet.params?.chain_id as string | undefined) || "ethereum";
+      walletAdapter = new TestWalletAdapter(testAddress, testChain);
+      walletKind = "test";
+    } else if (walletProvider === "ethers") {
+      // Ethers wallet adapter
       try {
-        walletConnectResult = await walletAdapter.connect();
+        const privateKey = input.wallet.params?.privateKey as string | undefined;
+        const wallet = input.wallet.params?.wallet as any;
         
-        if (!walletConnectResult.ok) {
-          // Wallet connection failed - return error
+        if (wallet) {
+          // Use provided wallet instance (synchronous)
+          walletAdapter = new EthersWalletAdapter({ wallet });
+        } else if (privateKey) {
+          // Use factory method for private key (async, ESM-compatible)
+          walletAdapter = await EthersWalletAdapter.create(privateKey);
+        } else {
           return {
             ok: false,
             code: "WALLET_CONNECT_FAILED",
-            reason: walletConnectResult.error || "Wallet connection failed",
+            reason: "EthersWalletAdapter requires either privateKey or wallet in params",
           };
         }
+        walletKind = "ethers";
       } catch (error: any) {
-        // Wallet connection threw an error
         return {
           ok: false,
           code: "WALLET_CONNECT_FAILED",
-          reason: error?.message || "Wallet connection error",
+          reason: error?.message || "Failed to create ethers wallet adapter",
+        };
+      }
+    } else if (walletProvider === SOLANA_WALLET_KIND || (walletProvider as string) === "solana-keypair") {
+      // Solana wallet adapter
+      try {
+        const secretKey = input.wallet.params?.secretKey as Uint8Array | undefined;
+        const keypair = input.wallet.params?.keypair as any;
+        
+        if (keypair || secretKey) {
+          walletAdapter = new SolanaWalletAdapter({ keypair, secretKey });
+        } else {
+          return {
+            ok: false,
+            code: "WALLET_CONNECT_FAILED",
+            reason: "SolanaWalletAdapter requires keypair or secretKey in params",
+          };
+        }
+        walletKind = SOLANA_WALLET_KIND;
+      } catch (error: any) {
+        return {
+          ok: false,
+          code: "WALLET_CONNECT_FAILED",
+          reason: error?.message || "Failed to create Solana wallet adapter",
+        };
+      }
+    } else if (walletProvider === "external") {
+      walletAdapter = new ExternalWalletAdapter(input.wallet.params);
+      walletKind = "external";
+    } else {
+      // Unknown provider - default to external
+      walletAdapter = new ExternalWalletAdapter(input.wallet.params);
+      walletKind = "external";
+    }
+    
+    // Get wallet address and metadata
+    if (walletAdapter) {
+      try {
+        const addr = await walletAdapter.getAddress();
+        walletAddress = addr.value;
+        walletKind = walletAdapter.kind;
+        walletChain = walletAdapter.chain;
+      } catch (error: any) {
+        return {
+          ok: false,
+          code: "WALLET_CONNECT_FAILED",
+          reason: error?.message || "Failed to get wallet address",
         };
       }
     }
@@ -138,11 +196,29 @@ export async function acquire(params: {
   
   // Initialize transcript collection if requested (needed for recordLifecycleError)
   const saveTranscript = input.saveTranscript ?? false;
+  
+  // Sanitize input for transcript (remove sensitive wallet data)
+  const sanitizedInput = { ...input };
+  if (sanitizedInput.wallet?.params) {
+    // Remove sensitive wallet params (privateKey, secretKey, keypair) from transcript
+    const sanitizedWalletParams: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(sanitizedInput.wallet.params)) {
+      // Only include non-sensitive params (like address, chain_id for test adapter)
+      if (key !== "privateKey" && key !== "secretKey" && key !== "keypair" && key !== "wallet") {
+        sanitizedWalletParams[key] = value;
+      }
+    }
+    sanitizedInput.wallet = {
+      ...sanitizedInput.wallet,
+      params: Object.keys(sanitizedWalletParams).length > 0 ? sanitizedWalletParams : undefined,
+    };
+  }
+  
   const transcriptData: Partial<TranscriptV1> | null = saveTranscript ? {
     version: "1",
     intent_type: input.intentType,
     timestamp_ms: nowFn ? nowFn() : Date.now(),
-    input: { ...input }, // Sanitized copy (can remove sensitive data if needed)
+    input: sanitizedInput, // Sanitized copy with sensitive wallet data removed
     directory: [],
     credential_checks: [],
     quotes: [],
@@ -151,11 +227,11 @@ export async function acquire(params: {
     asset_id: assetId,
     chain_id: chainId,
     // Wallet connection (v2.3+)
-    wallet: walletConnectResult ? {
-      provider: input.wallet?.provider ?? "external",
-      address: walletConnectResult.address,
-      chain_id: walletConnectResult.chain_id,
-      connected_at_ms: nowFn ? nowFn() : Date.now(),
+    wallet: walletAddress ? {
+      kind: walletKind ?? (input.wallet?.provider ?? "external"),
+      chain: walletChain ?? "evm", // Default to evm if chain not available (ethers uses evm)
+      address: walletAddress,
+      used: true,
     } : undefined,
     // Initialize settlement lifecycle metadata (v1.6.3+)
     settlement_lifecycle: input.settlement?.provider ? {

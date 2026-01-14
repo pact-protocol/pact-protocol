@@ -26,8 +26,28 @@ describe("ExternalWalletAdapter", () => {
 
   it("should throw when signMessage is called", async () => {
     const adapter = new ExternalWalletAdapter();
+    const message = new TextEncoder().encode("test message");
     
-    await expect(adapter.signMessage("test message")).rejects.toThrow("not implemented");
+    await expect(adapter.signMessage(message)).rejects.toThrow("not implemented");
+  });
+
+  it("should return chain from getChain()", () => {
+    const adapter = new ExternalWalletAdapter();
+    expect(adapter.getChain()).toBe("ethereum");
+    
+    const adapterBase = new ExternalWalletAdapter({ chain: "base" });
+    expect(adapterBase.getChain()).toBe("base");
+  });
+
+  it("should throw when getAddress() is called before connect", async () => {
+    const adapter = new ExternalWalletAdapter();
+    
+    await expect(adapter.getAddress()).rejects.toThrow("not connected");
+  });
+
+  it("should have kind property", () => {
+    const adapter = new ExternalWalletAdapter();
+    expect(adapter.kind).toBe("external");
   });
 
   it("should return 0 for getBalance (stub)", async () => {

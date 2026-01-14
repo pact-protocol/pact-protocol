@@ -42,7 +42,7 @@ export type AcquireInput = {
   };
   // Optional wallet adapter (v2.3+)
   wallet?: {
-    provider?: "external" | "test"; // Wallet provider (default: "external", "test" for testing only)
+    provider?: "external" | "test" | "ethers" | "solana-keypair"; // Wallet provider (default: "external", "test" for testing only, "ethers" for EVM wallets, "solana-keypair" for Solana wallets)
     params?: Record<string, unknown>; // Parameters for wallet provider
   };
   // Optional identity/verification (v1: for policy enforcement)

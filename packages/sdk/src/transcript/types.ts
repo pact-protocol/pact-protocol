@@ -141,10 +141,10 @@ export type TranscriptV1 = {
   
   // Wallet connection (v2.3+)
   wallet?: {
-    provider: string; // Wallet provider (e.g., "external")
-    address?: string; // Wallet address
-    chain_id?: string; // Chain ID
-    connected_at_ms?: number; // Timestamp when wallet was connected
+    kind: string; // Wallet kind/provider (e.g., "external", "ethers", "test")
+    chain: string; // Chain identifier (e.g., "ethereum", "solana")
+    address: string; // Wallet address (hex string for display)
+    used: boolean; // Whether wallet was used in this acquisition
   };
   
   // Outcome summary

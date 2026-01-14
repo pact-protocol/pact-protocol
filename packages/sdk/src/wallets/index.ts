@@ -1,10 +1,19 @@
 /**
  * Wallets Module
  * 
- * Provides wallet adapter interface for future integrations with
- * MetaMask, Coinbase Wallet, and other wallet providers.
+ * Provides chain-agnostic wallet adapter interface for future integrations with
+ * MetaMask, Coinbase Wallet, Solana wallets, and other wallet providers.
  */
 
+// Shared wallet types
 export * from "./types";
-export { ExternalWalletAdapter } from "./external";
+export type { AddressInfo } from "./ethers";
+
+// EthersWallet (EVM)
+export { EthersWalletAdapter as EthersWallet, WALLET_CONNECT_FAILED, WALLET_SIGN_FAILED, ETHERS_WALLET_KIND, EVM_CHAIN } from "./ethers";
+export type { EthersWalletOptions } from "./ethers";
+
+// SolanaWallet
+export { SolanaWalletAdapter as SolanaWallet, SOLANA_WALLET_KIND, SOLANA_CHAIN } from "./solana";
+export type { SolanaWalletOptions } from "./solana";
 
