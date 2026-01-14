@@ -5,7 +5,7 @@
  * Throws unless properly configured with a real wallet implementation.
  */
 
-import type { WalletAdapter, Chain, Address, WalletConnectResult } from "./types";
+import type { WalletAdapter, Chain, Address, WalletConnectResult, WalletCapabilities } from "./types";
 import type { AddressInfo } from "./ethers";
 
 export class ExternalWalletAdapter implements WalletAdapter {
@@ -63,6 +63,20 @@ export class ExternalWalletAdapter implements WalletAdapter {
   async getBalance(asset_id: string): Promise<number> {
     // Stub implementation - returns 0
     return 0;
+  }
+
+  /**
+   * Get wallet capabilities (v2 Phase 2+).
+   * ExternalWalletAdapter is a placeholder - no capabilities by default.
+   * 
+   * @returns Wallet capabilities (unknown chain, no signing capabilities)
+   */
+  getCapabilities(): WalletCapabilities {
+    return {
+      chain: "unknown",
+      can_sign_message: false,
+      can_sign_transaction: false,
+    };
   }
 }
 

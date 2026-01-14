@@ -72,6 +72,39 @@ Then run examples from Terminal B.
 - Final status: committed
 - Reconciliation event: pending → committed
 
+### ethers-wallet/run.ts
+
+**Command:** `pnpm example:ethers-wallet`
+
+**What it does:**
+- Creates an EthersWalletAdapter with a dev private key
+- Injects wallet into acquire() via input.wallet
+- Demonstrates wallet address retrieval (no network call)
+- Shows wallet metadata recorded in transcript
+
+**Expected outcome:**
+- ✅ Acquisition successful
+- Wallet address printed
+- Receipt with fulfilled: true
+- Transcript contains wallet metadata: { kind: "ethers", address, used: true }
+
+### solana-wallet-sign/run.ts
+
+**Command:** `pnpm example:solana-wallet-sign`
+
+**What it does:**
+- Creates a SolanaWalletAdapter with a dev seed
+- Signs a test message using ed25519
+- Injects wallet into acquire() via input.wallet
+- Shows wallet capabilities and metadata recorded in transcript
+
+**Expected outcome:**
+- ✅ Acquisition successful
+- Wallet address (base58) printed
+- Message signature printed
+- Receipt with fulfilled: true
+- Transcript contains wallet metadata with capabilities: { kind: "solana-keypair", chain: "solana", address, capabilities: { chain, can_sign_message, can_sign_transaction } }
+
 ## Transcripts
 
 All examples save transcripts to `.pact/transcripts/` with filenames like:

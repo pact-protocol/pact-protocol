@@ -36,6 +36,16 @@ export interface WalletConnectResult {
 }
 
 /**
+ * Wallet capabilities (v2 Phase 2+)
+ * Describes what operations a wallet can perform
+ */
+export interface WalletCapabilities {
+  chain: "solana" | "evm" | "unknown";
+  can_sign_message: boolean;
+  can_sign_transaction: boolean;
+}
+
+/**
  * Chain-agnostic wallet adapter interface
  */
 export interface WalletAdapter {
@@ -84,5 +94,13 @@ export interface WalletAdapter {
    * @returns Promise resolving to balance amount
    */
   getBalance?(asset_id: string): Promise<number>;
+
+  /**
+   * Get wallet capabilities (v2 Phase 2+).
+   * Optional - if not implemented, defaults to unknown chain with no capabilities.
+   * 
+   * @returns Wallet capabilities describing what operations are supported
+   */
+  getCapabilities?(): WalletCapabilities;
 }
 

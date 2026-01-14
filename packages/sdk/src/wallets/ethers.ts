@@ -8,7 +8,7 @@
  * It only provides wallet functionality (address, signing) without network access.
  */
 
-import type { WalletAdapter, WalletConnectResult, Chain, Address } from "./types";
+import type { WalletAdapter, WalletConnectResult, Chain, Address, WalletCapabilities } from "./types";
 
 // Type-safe error codes
 export const WALLET_CONNECT_FAILED = "WALLET_CONNECT_FAILED";
@@ -230,6 +230,20 @@ export class EthersWalletAdapter {
   async getBalance(_asset_id: string): Promise<number> {
     // Stub implementation - requires provider connection
     return 0;
+  }
+
+  /**
+   * Get wallet capabilities (v2 Phase 2+).
+   * EthersWalletAdapter supports both message and transaction signing.
+   * 
+   * @returns Wallet capabilities
+   */
+  getCapabilities(): WalletCapabilities {
+    return {
+      chain: "evm",
+      can_sign_message: true,
+      can_sign_transaction: true,
+    };
   }
 }
 

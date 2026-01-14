@@ -8,6 +8,7 @@
 // Shared wallet types
 export * from "./types";
 export type { AddressInfo } from "./ethers";
+export type { WalletCapabilities } from "./types";
 
 // EthersWallet (EVM)
 export { EthersWalletAdapter as EthersWallet, WALLET_CONNECT_FAILED, WALLET_SIGN_FAILED, ETHERS_WALLET_KIND, EVM_CHAIN } from "./ethers";

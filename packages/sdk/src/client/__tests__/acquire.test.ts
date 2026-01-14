@@ -257,9 +257,119 @@ describe("acquire", () => {
       // (This is a heuristic - we can't detect all possible signature encodings)
       expect(transcriptStr).not.toMatch(/[a-f0-9]{128}/); // 64 bytes = 128 hex chars
       
-      // Verify wallet object only contains expected fields
+      // Verify wallet object only contains expected fields (v2 Phase 2+ includes capabilities)
       const walletKeys = Object.keys(transcript.wallet);
-      expect(walletKeys.sort()).toEqual(["address", "chain", "kind", "used"]);
+      expect(walletKeys.sort()).toEqual(["address", "capabilities", "chain", "kind", "used"]);
+      
+      // Verify capabilities are included (v2 Phase 2+)
+      expect(transcript.wallet.capabilities).toBeDefined();
+      expect(transcript.wallet.capabilities.chain).toBe("solana");
+      expect(transcript.wallet.capabilities.can_sign_message).toBe(true);
+      expect(transcript.wallet.capabilities.can_sign_transaction).toBe(true);
+    }
+  });
+
+  it("should fail with WALLET_CAPABILITY_MISSING when transaction signing required but not available", async () => {
+    const buyer = createKeyPair();
+    const seller = createKeyPair();
+    const policy = createDefaultPolicy();
+    const settlement = new MockSettlementProvider();
+    settlement.credit(buyer.id, 1.0);
+    settlement.credit(seller.id, 0.1);
+    const store = new ReceiptStore();
+
+    // Use TestWalletAdapter which cannot sign transactions
+    const result = await acquire({
+      input: {
+        intentType: "weather.data",
+        scope: "NYC",
+        constraints: { latency_ms: 50, freshness_sec: 10 },
+        maxPrice: 0.0001,
+        saveTranscript: true,
+        wallet: {
+          provider: "test",
+          params: {
+            address: "0x1234567890123456789012345678901234567890",
+            chain_id: "ethereum",
+          },
+          requires_transaction_signature: true, // Require transaction signing
+        },
+      },
+      buyerKeyPair: buyer.keyPair,
+      sellerKeyPair: seller.keyPair,
+      buyerId: buyer.id,
+      sellerId: seller.id,
+      policy,
+      settlement,
+      store,
+      now: createClock(),
+    });
+
+    // Should fail with WALLET_CAPABILITY_MISSING
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("WALLET_CAPABILITY_MISSING");
+    expect(result.reason).toContain("cannot sign transactions");
+    
+    // Verify transcript was written with wallet info
+    if (result.transcriptPath) {
+      const transcriptContent = fs.readFileSync(result.transcriptPath, "utf-8");
+      const transcript = JSON.parse(transcriptContent);
+      expect(transcript.wallet).toBeDefined();
+      expect(transcript.wallet.capabilities).toBeDefined();
+      expect(transcript.wallet.capabilities.can_sign_transaction).toBe(false);
+    }
+  });
+
+  it("should succeed when transaction signing required and wallet supports it", async () => {
+    const buyer = createKeyPair();
+    const seller = createKeyPair();
+    const policy = createDefaultPolicy();
+    const settlement = new MockSettlementProvider();
+    settlement.credit(buyer.id, 1.0);
+    settlement.credit(seller.id, 0.1);
+    const store = new ReceiptStore();
+
+    // Use SolanaWalletAdapter which can sign transactions
+    const fixedSeed = new Uint8Array([
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+      16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31
+    ]);
+
+    const result = await acquire({
+      input: {
+        intentType: "weather.data",
+        scope: "NYC",
+        constraints: { latency_ms: 50, freshness_sec: 10 },
+        maxPrice: 0.0001,
+        saveTranscript: true,
+        wallet: {
+          provider: "solana-keypair",
+          params: {
+            secretKey: fixedSeed,
+          },
+          requires_transaction_signature: true, // Require transaction signing
+        },
+      },
+      buyerKeyPair: buyer.keyPair,
+      sellerKeyPair: seller.keyPair,
+      buyerId: buyer.id,
+      sellerId: seller.id,
+      policy,
+      settlement,
+      store,
+      now: createClock(),
+    });
+
+    // Should succeed
+    expect(result.ok).toBe(true);
+    
+    // Verify capabilities in transcript
+    if (result.ok && result.transcriptPath) {
+      const transcriptContent = fs.readFileSync(result.transcriptPath, "utf-8");
+      const transcript = JSON.parse(transcriptContent);
+      expect(transcript.wallet).toBeDefined();
+      expect(transcript.wallet.capabilities).toBeDefined();
+      expect(transcript.wallet.capabilities.can_sign_transaction).toBe(true);
     }
   });
 

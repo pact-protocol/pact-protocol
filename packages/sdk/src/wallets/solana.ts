@@ -8,7 +8,7 @@
  * It only provides wallet functionality (address, signing) without network access.
  */
 
-import type { WalletAdapter, WalletConnectResult, Chain, Address } from "./types";
+import type { WalletAdapter, WalletConnectResult, Chain, Address, WalletCapabilities } from "./types";
 import type { AddressInfo } from "./ethers";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
@@ -183,6 +183,20 @@ export class SolanaWalletAdapter {
   async getBalance(_asset_id: string): Promise<number> {
     // Stub implementation - requires provider connection
     return 0;
+  }
+
+  /**
+   * Get wallet capabilities (v2 Phase 2+).
+   * SolanaWalletAdapter supports both message and transaction signing.
+   * 
+   * @returns Wallet capabilities
+   */
+  getCapabilities(): WalletCapabilities {
+    return {
+      chain: "solana",
+      can_sign_message: true,
+      can_sign_transaction: true,
+    };
   }
 }
 

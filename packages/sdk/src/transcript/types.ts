@@ -145,6 +145,12 @@ export type TranscriptV1 = {
     chain: string; // Chain identifier (e.g., "ethereum", "solana")
     address: string; // Wallet address (hex string for display)
     used: boolean; // Whether wallet was used in this acquisition
+    // Wallet capabilities (v2 Phase 2+)
+    capabilities?: {
+      chain: "solana" | "evm" | "unknown";
+      can_sign_message: boolean;
+      can_sign_transaction: boolean;
+    };
   };
   
   // Outcome summary

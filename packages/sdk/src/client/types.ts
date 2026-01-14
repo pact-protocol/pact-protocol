@@ -44,6 +44,7 @@ export type AcquireInput = {
   wallet?: {
     provider?: "external" | "test" | "ethers" | "solana-keypair"; // Wallet provider (default: "external", "test" for testing only, "ethers" for EVM wallets, "solana-keypair" for Solana wallets)
     params?: Record<string, unknown>; // Parameters for wallet provider
+    requires_transaction_signature?: boolean; // v2 Phase 2+: If true, acquisition will fail if wallet cannot sign transactions
   };
   // Optional identity/verification (v1: for policy enforcement)
   identity?: {

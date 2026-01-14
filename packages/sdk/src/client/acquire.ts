@@ -31,7 +31,7 @@ import { BaselineNegotiationStrategy } from "../negotiation/baseline";
 import { BandedConcessionStrategy } from "../negotiation/banded_concession";
 import { AggressiveIfUrgentStrategy } from "../negotiation/aggressive_if_urgent";
 import type { NegotiationResult } from "../negotiation/types";
-import type { WalletAdapter, WalletConnectResult } from "../wallets/types";
+import type { WalletAdapter, WalletConnectResult, WalletCapabilities } from "../wallets/types";
 import { ExternalWalletAdapter } from "../wallets/external";
 import { EthersWalletAdapter, type AddressInfo } from "../wallets/ethers";
 import { SolanaWalletAdapter, SOLANA_WALLET_KIND } from "../wallets/solana";
@@ -76,6 +76,7 @@ export async function acquire(params: {
   let walletAddress: string | undefined;
   let walletKind: string | undefined;
   let walletChain: string | undefined;
+  let walletCapabilities: WalletCapabilities | undefined;
   
   // Helper to convert Address (Uint8Array) to hex string
   const addressToHex = (address: Uint8Array): string => {
@@ -91,10 +92,20 @@ export async function acquire(params: {
     if (walletProvider === "test") {
       // Test-only provider for integration tests
       if (!TestWalletAdapter) {
-        // Test adapter not available - try to load it dynamically
+        // Test adapter not available - try to load it dynamically using ESM import
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const testAdapterModule = require("../wallets/__tests__/test-adapter");
+          // Use dynamic import for ESM compatibility
+          // Try with .js extension first (ESM requirement), fall back to no extension
+          let testAdapterModule: any;
+          try {
+            testAdapterModule = await import("../wallets/__tests__/test-adapter.js");
+          } catch (e1) {
+            try {
+              testAdapterModule = await import("../wallets/__tests__/test-adapter");
+            } catch (e2) {
+              throw e1; // Throw original error
+            }
+          }
           if (testAdapterModule && testAdapterModule.TestWalletAdapter) {
             TestWalletAdapter = testAdapterModule.TestWalletAdapter;
           } else {
@@ -109,7 +120,7 @@ export async function acquire(params: {
           return {
             ok: false,
             code: "WALLET_CONNECT_FAILED",
-            reason: "Test wallet adapter not available",
+            reason: `Test wallet adapter not available: ${(e as Error).message}`,
           };
         }
       }
@@ -177,13 +188,39 @@ export async function acquire(params: {
       walletKind = "external";
     }
     
-    // Get wallet address and metadata
+    // Get wallet address, metadata, and capabilities
     if (walletAdapter) {
       try {
         const addr = await walletAdapter.getAddress();
         walletAddress = addr.value;
         walletKind = walletAdapter.kind;
         walletChain = walletAdapter.chain;
+        
+        // Get wallet capabilities (v2 Phase 2+)
+        if (walletAdapter.getCapabilities) {
+          walletCapabilities = walletAdapter.getCapabilities();
+        } else {
+          // Default capabilities if not implemented
+          walletCapabilities = {
+            chain: walletAdapter.chain === "solana" ? "solana" : 
+                   walletAdapter.chain === "evm" || walletAdapter.chain === "ethereum" || 
+                   walletAdapter.chain === "base" || walletAdapter.chain === "polygon" || 
+                   walletAdapter.chain === "arbitrum" ? "evm" : "unknown",
+            can_sign_message: typeof walletAdapter.signMessage === "function",
+            can_sign_transaction: typeof walletAdapter.signTransaction === "function",
+          };
+        }
+        
+        // Enforce transaction signing capability if required (v2 Phase 2+)
+        if (input.wallet?.requires_transaction_signature) {
+          if (!walletCapabilities || !walletCapabilities.can_sign_transaction) {
+            return {
+              ok: false,
+              code: "WALLET_CAPABILITY_MISSING",
+              reason: "Wallet cannot sign transactions",
+            };
+          }
+        }
       } catch (error: any) {
         return {
           ok: false,
@@ -232,6 +269,8 @@ export async function acquire(params: {
       chain: walletChain ?? "evm", // Default to evm if chain not available (ethers uses evm)
       address: walletAddress,
       used: true,
+      // Wallet capabilities (v2 Phase 2+)
+      capabilities: walletCapabilities,
     } : undefined,
     // Initialize settlement lifecycle metadata (v1.6.3+)
     settlement_lifecycle: input.settlement?.provider ? {

@@ -4,7 +4,7 @@
  * Simple wallet adapter for testing that always succeeds.
  */
 
-import type { WalletAdapter, Chain, Address, WalletConnectResult } from "../types";
+import type { WalletAdapter, Chain, Address, WalletConnectResult, WalletCapabilities } from "../types";
 import type { AddressInfo } from "../ethers";
 
 // Helper to convert hex string to Uint8Array
@@ -63,6 +63,26 @@ export class TestWalletAdapter implements WalletAdapter {
 
   async getBalance(asset_id: string): Promise<number> {
     return 1000; // Mock balance
+  }
+
+  /**
+   * Get wallet capabilities (v2 Phase 2+).
+   * TestWalletAdapter supports message signing but not transaction signing.
+   * 
+   * @returns Wallet capabilities
+   */
+  getCapabilities(): WalletCapabilities {
+    // Determine chain from this.chain
+    const chainType: "solana" | "evm" | "unknown" = 
+      this.chain === "solana" ? "solana" :
+      this.chain === "evm" || this.chain === "ethereum" || this.chain === "base" || this.chain === "polygon" || this.chain === "arbitrum" ? "evm" :
+      "unknown";
+    
+    return {
+      chain: chainType,
+      can_sign_message: true, // Test adapter can sign messages
+      can_sign_transaction: false, // Test adapter does not implement signTransaction
+    };
   }
 }
 
