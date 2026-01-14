@@ -28,6 +28,8 @@ import { selectSettlementProvider } from "../settlement/routing";
 import { isRetryableFailure, buildFallbackPlan, type ProviderCandidate } from "../settlement/fallback";
 import type { NegotiationStrategy } from "../negotiation/strategy";
 import { BaselineNegotiationStrategy } from "../negotiation/baseline";
+import { BandedConcessionStrategy } from "../negotiation/banded_concession";
+import { AggressiveIfUrgentStrategy } from "../negotiation/aggressive_if_urgent";
 import type { NegotiationResult } from "../negotiation/types";
 import type { WalletAdapter, WalletConnectResult } from "../wallets/types";
 import { ExternalWalletAdapter } from "../wallets/external";
@@ -1900,27 +1902,138 @@ export async function acquire(params: {
   let negotiationStrategy: NegotiationStrategy;
   if (negotiationStrategyName === "baseline") {
     negotiationStrategy = new BaselineNegotiationStrategy();
+  } else if (negotiationStrategyName === "banded_concession") {
+    negotiationStrategy = new BandedConcessionStrategy();
+  } else if (negotiationStrategyName === "aggressive_if_urgent") {
+    negotiationStrategy = new AggressiveIfUrgentStrategy();
   } else {
     // Default to baseline for unknown strategies
     negotiationStrategy = new BaselineNegotiationStrategy();
   }
 
-  const negotiationInput = {
-    intent_type: input.intentType,
-    buyer_id: buyerId,
-    provider_id: selectedProvider.provider_id || selectedProviderPubkey,
-    reference_price: referenceP50,
-    quote_price: selectedAskPrice,
-    max_price: input.maxPrice,
-    band_pct: input.negotiation?.params?.band_pct as number | undefined,
-    max_rounds: input.negotiation?.params?.max_rounds as number | undefined,
-    max_total_duration_ms: input.negotiation?.params?.max_total_duration_ms as number | undefined,
-    urgent: input.urgent,
-  };
+  // For negotiated regime, run negotiation rounds loop (v2.3+)
+  let negotiationResult: NegotiationResult | undefined;
+  let negotiationRounds: Array<{
+    round: number;
+    ask_price: number;
+    counter_price: number;
+    accepted: boolean;
+    reason: string;
+    timestamp_ms: number;
+    strategy_id?: string; // Strategy used for this round (v2.3.1+)
+  }> = [];
+  
+  if (plan.regime === "negotiated" && (negotiationStrategyName === "banded_concession" || negotiationStrategyName === "aggressive_if_urgent")) {
+    // Run negotiation rounds for negotiated regime with banded_concession
+    const effectiveMaxRounds = input.negotiation?.params?.max_rounds as number | undefined ?? plan.maxRounds;
+    const bandPct = input.negotiation?.params?.band_pct as number | undefined ?? 0.1;
+    
+    let accepted = false;
+    let finalAgreedPrice = selectedAskPrice;
+    
+    for (let round = 1; round <= effectiveMaxRounds && !accepted; round++) {
+      const roundTime = nowFunction();
+      
+      // Call negotiation strategy for this round
+      const roundInput = {
+        intent_type: input.intentType,
+        buyer_id: buyerId,
+        provider_id: selectedProvider.provider_id || selectedProviderPubkey,
+        reference_price: referenceP50,
+        quote_price: selectedAskPrice, // Reuse initial ask
+        max_price: input.maxPrice,
+        band_pct: bandPct,
+        max_rounds: effectiveMaxRounds,
+        max_total_duration_ms: input.negotiation?.params?.max_total_duration_ms as number | undefined,
+        urgent: input.urgent,
+        current_round: round,
+        allow_band_override: input.urgent,
+      };
+      
+      const roundResult = await negotiationStrategy.negotiate(roundInput);
+      
+      const counterPrice = roundResult.counter_price ?? roundResult.agreed_price;
+      const roundAccepted = counterPrice >= selectedAskPrice;
+      
+      // Record round
+      negotiationRounds.push({
+        round,
+        ask_price: selectedAskPrice,
+        counter_price: counterPrice,
+        accepted: roundAccepted,
+        reason: roundResult.reason || (roundAccepted ? "Counter accepted" : `Round ${round} counteroffer`),
+        timestamp_ms: roundTime,
+        strategy_id: negotiationStrategyName, // Record which strategy was used (v2.3.1+)
+      });
+      
+      if (roundAccepted) {
+        accepted = true;
+        finalAgreedPrice = selectedAskPrice; // Use ask price when accepted
+        negotiationResult = roundResult;
+        break;
+      }
+      
+      // If this is the last round and not accepted, use the result
+      if (round === effectiveMaxRounds) {
+        negotiationResult = roundResult;
+        finalAgreedPrice = counterPrice;
+      }
+    }
+    
+    if (!accepted && negotiationRounds.length === 0) {
+      // No rounds executed - fall back to single negotiation
+      const fallbackInput = {
+        intent_type: input.intentType,
+        buyer_id: buyerId,
+        provider_id: selectedProvider.provider_id || selectedProviderPubkey,
+        reference_price: referenceP50,
+        quote_price: selectedAskPrice,
+        max_price: input.maxPrice,
+        band_pct: bandPct,
+        max_rounds: effectiveMaxRounds,
+        max_total_duration_ms: input.negotiation?.params?.max_total_duration_ms as number | undefined,
+        urgent: input.urgent,
+        allow_band_override: input.urgent,
+      };
+      negotiationResult = await negotiationStrategy.negotiate(fallbackInput);
+      finalAgreedPrice = negotiationResult.agreed_price;
+    }
+    
+    // Ensure negotiationResult is set
+    if (!negotiationResult) {
+      // Fallback: create a result from the last round
+      const lastRound = negotiationRounds[negotiationRounds.length - 1];
+      negotiationResult = {
+        ok: lastRound?.accepted ?? false,
+        agreed_price: lastRound?.accepted ? selectedAskPrice : (lastRound?.counter_price ?? selectedAskPrice),
+        rounds_used: negotiationRounds.length,
+        log: [],
+        counter_price: lastRound?.counter_price,
+        within_band: true,
+        used_override: false,
+        reason: lastRound?.accepted ? undefined : "Negotiation did not reach agreement",
+      };
+    }
+  } else {
+    // Non-negotiated regime or baseline strategy - single negotiation call
+    const negotiationInput = {
+      intent_type: input.intentType,
+      buyer_id: buyerId,
+      provider_id: selectedProvider.provider_id || selectedProviderPubkey,
+      reference_price: referenceP50,
+      quote_price: selectedAskPrice,
+      max_price: input.maxPrice,
+      band_pct: input.negotiation?.params?.band_pct as number | undefined,
+      max_rounds: input.negotiation?.params?.max_rounds as number | undefined,
+      max_total_duration_ms: input.negotiation?.params?.max_total_duration_ms as number | undefined,
+      urgent: input.urgent,
+      allow_band_override: input.urgent,
+    };
 
-  const negotiationResult: NegotiationResult = await negotiationStrategy.negotiate(negotiationInput);
+    negotiationResult = await negotiationStrategy.negotiate(negotiationInput);
+  }
 
-  if (!negotiationResult.ok) {
+  if (!negotiationResult || !negotiationResult.ok) {
     // Negotiation failed - treat as non-retryable failure
     const action = handleAttemptFailure(
       "NEGOTIATION_FAILED",
@@ -1957,11 +2070,13 @@ export async function acquire(params: {
     continue;
   }
 
-  // Use negotiated price instead of quote price
-  const negotiatedPrice = negotiationResult.agreed_price;
+  // Use negotiated price (for negotiated regime with rounds, this is the accepted ask price or final counter)
+  const negotiatedPrice = plan.regime === "negotiated" && (negotiationStrategyName === "banded_concession" || negotiationStrategyName === "aggressive_if_urgent") && negotiationRounds.length > 0
+    ? (negotiationRounds[negotiationRounds.length - 1].accepted ? selectedAskPrice : negotiationRounds[negotiationRounds.length - 1].counter_price)
+    : (negotiationResult?.agreed_price ?? selectedAskPrice);
 
   // Record negotiation in transcript
-  if (transcriptData) {
+  if (transcriptData && negotiationResult) {
     transcriptData.negotiation = {
       strategy: negotiationStrategyName,
       rounds_used: negotiationResult.rounds_used,
@@ -1980,6 +2095,11 @@ export async function acquire(params: {
         },
       })),
     };
+    
+    // Record negotiation rounds detail (v2.3+)
+    if (negotiationRounds.length > 0) {
+      transcriptData.negotiation_rounds = negotiationRounds;
+    }
   }
 
   // 7) Build and sign ACCEPT envelope

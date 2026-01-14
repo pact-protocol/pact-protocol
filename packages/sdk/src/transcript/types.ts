@@ -128,6 +128,17 @@ export type TranscriptV1 = {
     }>;
   };
   
+  // Negotiation rounds detail (v2.3+)
+  negotiation_rounds?: Array<{
+    round: number;
+    ask_price: number;
+    counter_price: number;
+    accepted: boolean;
+    reason: string;
+    timestamp_ms: number;
+    strategy_id?: string; // Strategy used for this round (v2.3.1+)
+  }>;
+  
   // Wallet connection (v2.3+)
   wallet?: {
     provider: string; // Wallet provider (e.g., "external")

@@ -35,6 +35,8 @@ export type NegotiationInput = {
   max_rounds?: number; // Maximum negotiation rounds (default: 1)
   max_total_duration_ms?: number; // Maximum total duration for negotiation
   urgent?: boolean; // Whether this is an urgent request
+  current_round?: number; // Current round number (for round-by-round negotiation)
+  allow_band_override?: boolean; // Allow urgent override beyond band (v2.3+)
 };
 
 export type NegotiationResult = {
@@ -43,5 +45,9 @@ export type NegotiationResult = {
   rounds_used: number;
   log: NegotiationLogEntry[];
   reason?: string; // Reason if ok=false
+  // Additional fields for banded_concession strategy
+  counter_price?: number; // Final counter price offered
+  within_band?: boolean; // Whether counter was within band
+  used_override?: boolean; // Whether urgent override was used
 };
 

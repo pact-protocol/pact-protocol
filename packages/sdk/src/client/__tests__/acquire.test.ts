@@ -152,8 +152,6 @@ describe("acquire", () => {
     // The test adapter should be available since we imported it
     // If it's not, the require() in acquire() should load it
     if (!result.ok) {
-      // Log the error for debugging
-      console.log(`Wallet test failed: ${result.code} - ${result.reason}`);
       // If test adapter is not available, that's okay - the test verifies the failure path
       if (result.code === "WALLET_CONNECT_FAILED" && result.reason?.includes("not available")) {
         // Test adapter not available - this is expected in some environments
