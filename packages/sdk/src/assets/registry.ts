@@ -4,7 +4,7 @@
  * Static registry of asset metadata. Default asset is USDC.
  */
 
-import type { AssetId, AssetMeta } from "./types";
+import type { AssetId, AssetMeta, ChainId } from "./types";
 
 const ASSET_REGISTRY: Record<AssetId, AssetMeta> = {
   USDC: {
@@ -72,5 +72,52 @@ export function getAssetMeta(asset_id?: AssetId): AssetMeta {
   }
   
   return meta;
+}
+
+/**
+ * Resolve asset metadata from symbol and optional chain.
+ * Returns default USDC metadata if symbol not found or not provided.
+ * 
+ * @param symbol - Asset symbol (e.g., "USDC", "ETH", "SOL")
+ * @param chain - Optional chain identifier (e.g., "ethereum", "solana")
+ * @param decimals - Optional decimals override
+ * @returns Asset metadata
+ */
+export function resolveAssetFromSymbol(symbol?: string, chain?: string, decimals?: number): AssetMeta {
+  // Default to USDC if no symbol provided
+  if (!symbol) {
+    return ASSET_REGISTRY[DEFAULT_ASSET_ID];
+  }
+  
+  // Try to find asset by symbol (case-insensitive)
+  const symbolUpper = symbol.toUpperCase();
+  const assetId = symbolUpper as AssetId;
+  
+  if (ASSET_REGISTRY[assetId]) {
+    const meta = { ...ASSET_REGISTRY[assetId] };
+    
+    // Override chain if provided
+    if (chain) {
+      meta.chain_id = chain as ChainId;
+    }
+    
+    // Override decimals if provided
+    if (decimals !== undefined) {
+      meta.decimals = decimals;
+    }
+    
+    return meta;
+  }
+  
+  // If symbol not found, create a synthetic asset metadata
+  // This allows custom assets while maintaining backward compatibility
+  const syntheticMeta: AssetMeta = {
+    asset_id: DEFAULT_ASSET_ID, // Use USDC as fallback asset_id
+    symbol: symbolUpper,
+    decimals: decimals ?? 6, // Default to 6 decimals (USDC-like)
+    chain_id: (chain as ChainId) || "unknown",
+  };
+  
+  return syntheticMeta;
 }
 

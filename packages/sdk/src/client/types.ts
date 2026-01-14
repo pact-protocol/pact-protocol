@@ -37,14 +37,28 @@ export type AcquireInput = {
   };
   // Optional asset specification (v2.2+)
   asset?: {
-    asset_id?: "USDC" | "USDT" | "BTC" | "ETH" | "SOL" | "HYPE" | "XRP"; // Default: "USDC"
-    chain_id?: "solana" | "ethereum" | "base" | "polygon" | "arbitrum" | "unknown";
+    symbol?: string; // Asset symbol (e.g., "USDC", "ETH", "SOL") - new format
+    chain?: string; // Chain identifier (e.g., "ethereum", "solana", "base")
+    decimals?: number; // Number of decimals (e.g., 6 for USDC, 18 for ETH)
+    // Legacy format support (for backward compatibility)
+    asset_id?: "USDC" | "USDT" | "BTC" | "ETH" | "SOL" | "HYPE" | "XRP"; // Legacy: use symbol instead
+    chain_id?: "solana" | "ethereum" | "base" | "polygon" | "arbitrum" | "unknown"; // Legacy: use chain instead
   };
   // Optional wallet adapter (v2.3+)
   wallet?: {
     provider?: "external" | "test" | "ethers" | "solana-keypair"; // Wallet provider (default: "external", "test" for testing only, "ethers" for EVM wallets, "solana-keypair" for Solana wallets)
     params?: Record<string, unknown>; // Parameters for wallet provider
     requires_transaction_signature?: boolean; // v2 Phase 2+: If true, acquisition will fail if wallet cannot sign transactions
+    // Wallet execution layer (v2 Phase 2 Execution Layer)
+    requires_signature?: boolean; // If true, wallet.sign() will be called during acquisition
+    signature_action?: {
+      action?: "authorize" | "transfer" | "refund"; // Action type (default: "authorize")
+      asset_symbol?: string; // Asset symbol (default: from input.asset?.asset_id or "USDC")
+      amount?: number; // Amount (default: from receipt agreed_price if available)
+      to?: string; // Recipient address (default: seller address)
+      memo?: string; // Optional memo
+      idempotency_key?: string; // Optional idempotency key
+    };
   };
   // Optional identity/verification (v1: for policy enforcement)
   identity?: {

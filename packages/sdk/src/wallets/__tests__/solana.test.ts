@@ -159,9 +159,9 @@ describe("SolanaWalletAdapter", () => {
     }).toThrow("SolanaWalletAdapter secretKey must be 32 or 64 bytes");
   });
 
-  it("should connect successfully", async () => {
+  it("should connect successfully (legacy)", async () => {
     const adapter = new SolanaWalletAdapter({ keypair: FIXED_KEYPAIR });
-    const result = await adapter.connect();
+    const result = await adapter.connectLegacy();
     
     expect(result.ok).toBe(true);
     expect(result.address).toBeInstanceOf(Uint8Array);
@@ -169,6 +169,12 @@ describe("SolanaWalletAdapter", () => {
     const decodedAddress = bs58.decode(EXPECTED_PUBLIC_KEY_BASE58);
     expect(result.address).toEqual(decodedAddress);
     expect(result.chain).toBe("solana");
+  });
+
+  it("should connect successfully (v2 Phase 2 Execution Layer)", async () => {
+    const adapter = new SolanaWalletAdapter({ keypair: FIXED_KEYPAIR });
+    // v2 Phase 2 Execution Layer: connect() returns void, throws on failure
+    await expect(adapter.connect()).resolves.toBeUndefined();
   });
 
   it("should sign transaction bytes", async () => {
@@ -210,6 +216,92 @@ describe("SolanaWalletAdapter", () => {
     expect(SOLANA_CHAIN).toBe("solana");
     expect(WALLET_CONNECT_FAILED).toBe("WALLET_CONNECT_FAILED");
     expect(WALLET_SIGN_FAILED).toBe("WALLET_SIGN_FAILED");
+  });
+
+  describe("WalletAction signing (v2 Phase 2 Execution Layer)", () => {
+    it("should sign WalletAction deterministically", async () => {
+      const adapter = new SolanaWalletAdapter({ secretKey: FIXED_SEED });
+      
+      const walletAction = {
+        action: "authorize" as const,
+        asset_symbol: "USDC",
+        amount: 0.0001,
+        from: EXPECTED_PUBLIC_KEY_BASE58,
+        to: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+        memo: "Test authorization",
+        idempotency_key: "test-001",
+      };
+      
+      const signature = await adapter.sign(walletAction);
+      
+      // Verify signature structure
+      expect(signature.chain).toBe("solana");
+      expect(signature.signer).toBe(EXPECTED_PUBLIC_KEY_BASE58);
+      expect(signature.scheme).toBe("ed25519");
+      expect(signature.payload_hash).toBeDefined();
+      expect(signature.signature).toBeDefined();
+      expect(signature.signature.length).toBe(64); // ed25519 signature length
+      
+      // Verify signature is deterministic (same action produces same signature)
+      const signature2 = await adapter.sign(walletAction);
+      expect(signature2.payload_hash).toBe(signature.payload_hash);
+      expect(signature2.signer).toBe(signature.signer);
+    });
+
+    it("should verify WalletAction signature", async () => {
+      const adapter = new SolanaWalletAdapter({ secretKey: FIXED_SEED });
+      
+      const walletAction = {
+        action: "authorize" as const,
+        asset_symbol: "USDC",
+        amount: 0.0001,
+        from: EXPECTED_PUBLIC_KEY_BASE58,
+        to: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+        memo: "Test authorization",
+        idempotency_key: "test-001",
+      };
+      
+      const signature = await adapter.sign(walletAction);
+      
+      // Verify signature
+      const isValid = adapter.verify(signature, walletAction);
+      expect(isValid).toBe(true);
+      
+      // Verify fails with wrong signer
+      const wrongAction = { ...walletAction, from: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM" };
+      const isValidWrong = adapter.verify(signature, wrongAction);
+      expect(isValidWrong).toBe(false);
+    });
+
+    it("should produce different signatures for different actions", async () => {
+      const adapter = new SolanaWalletAdapter({ secretKey: FIXED_SEED });
+      
+      const action1 = {
+        action: "authorize" as const,
+        asset_symbol: "USDC",
+        amount: 0.0001,
+        from: EXPECTED_PUBLIC_KEY_BASE58,
+        to: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+        memo: "Action 1",
+        idempotency_key: "test-001",
+      };
+      
+      const action2 = {
+        action: "authorize" as const,
+        asset_symbol: "USDC",
+        amount: 0.0002, // Different amount
+        from: EXPECTED_PUBLIC_KEY_BASE58,
+        to: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+        memo: "Action 2",
+        idempotency_key: "test-002",
+      };
+      
+      const sig1 = await adapter.sign(action1);
+      const sig2 = await adapter.sign(action2);
+      
+      // Different actions should produce different payload hashes
+      expect(sig1.payload_hash).not.toBe(sig2.payload_hash);
+    });
   });
 });
 

@@ -2,20 +2,16 @@ import { describe, it, expect } from "vitest";
 import { ExternalWalletAdapter } from "../external";
 
 describe("ExternalWalletAdapter", () => {
-  it("should fail to connect when not configured", async () => {
+  it("should fail to connect when not configured (v2 Phase 2 Execution Layer)", async () => {
     const adapter = new ExternalWalletAdapter();
-    const result = await adapter.connect();
-    
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("not configured");
+    // v2 Phase 2 Execution Layer: connect() throws on failure
+    await expect(adapter.connect()).rejects.toThrow("not configured");
   });
 
-  it("should fail to connect when provider is missing", async () => {
+  it("should fail to connect when provider is missing (v2 Phase 2 Execution Layer)", async () => {
     const adapter = new ExternalWalletAdapter({});
-    const result = await adapter.connect();
-    
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("not configured");
+    // v2 Phase 2 Execution Layer: connect() throws on failure
+    await expect(adapter.connect()).rejects.toThrow("not configured");
   });
 
   it("should throw when connect is called with provider but not implemented", async () => {

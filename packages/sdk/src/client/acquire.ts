@@ -31,7 +31,7 @@ import { BaselineNegotiationStrategy } from "../negotiation/baseline";
 import { BandedConcessionStrategy } from "../negotiation/banded_concession";
 import { AggressiveIfUrgentStrategy } from "../negotiation/aggressive_if_urgent";
 import type { NegotiationResult } from "../negotiation/types";
-import type { WalletAdapter, WalletConnectResult, WalletCapabilities } from "../wallets/types";
+import type { WalletAdapter, WalletConnectResult, WalletCapabilities, WalletAction, WalletSignature } from "../wallets/types";
 import { ExternalWalletAdapter } from "../wallets/external";
 import { EthersWalletAdapter, type AddressInfo } from "../wallets/ethers";
 import { SolanaWalletAdapter, SOLANA_WALLET_KIND } from "../wallets/solana";
@@ -66,9 +66,34 @@ export async function acquire(params: {
 }): Promise<AcquireResult> {
   const { input, buyerKeyPair, sellerKeyPair, buyerId, sellerId, policy, settlement: explicitSettlement, store, directory, rfq, now: nowFn } = params;
   
-  // Extract asset metadata (v2.2+)
-  const assetId = input.asset?.asset_id ?? "USDC";
-  const chainId = input.asset?.chain_id;
+  // Extract and resolve asset metadata (v2.2+)
+  // Support new format: { symbol, chain, decimals }
+  // Also support legacy format: { asset_id, chain_id } for backward compatibility
+  // Map to internal asset_id and chain_id for backward compatibility
+  const { resolveAssetFromSymbol, getAssetMeta } = await import("../assets/registry");
+  let assetMeta;
+  // Support both new format (symbol) and legacy format (asset_id) for backward compatibility
+  if (input.asset?.symbol) {
+    // New format: { symbol, chain, decimals }
+    assetMeta = resolveAssetFromSymbol(
+      input.asset.symbol,
+      input.asset.chain,
+      input.asset.decimals
+    );
+  } else if (input.asset?.asset_id) {
+    // Legacy format: { asset_id, chain_id } - convert to new format
+    assetMeta = getAssetMeta(input.asset.asset_id);
+    if (input.asset.chain_id) {
+      assetMeta.chain_id = input.asset.chain_id;
+    }
+  } else {
+    // No asset specified - use default
+    assetMeta = resolveAssetFromSymbol();
+  }
+  const assetId = assetMeta.asset_id;
+  const chainId = assetMeta.chain_id;
+  const assetSymbol = assetMeta.symbol;
+  const assetDecimals = assetMeta.decimals;
   
   // Wallet adapter connection (v2.3+)
   // All wallet adapters now have async getAddress() that returns AddressInfo with kind and chain properties
@@ -77,6 +102,8 @@ export async function acquire(params: {
   let walletKind: string | undefined;
   let walletChain: string | undefined;
   let walletCapabilities: WalletCapabilities | undefined;
+  let walletSignature: WalletSignature | undefined;
+  let walletCapabilitiesResponse: any; // WalletCapabilitiesResponse from capabilities() method
   
   // Helper to convert Address (Uint8Array) to hex string
   const addressToHex = (address: Uint8Array): string => {
@@ -188,15 +215,24 @@ export async function acquire(params: {
       walletKind = "external";
     }
     
-    // Get wallet address, metadata, and capabilities
+    // Connect wallet and get address, metadata, and capabilities (v2 Phase 2 Execution Layer)
     if (walletAdapter) {
       try {
+        // Connect wallet (v2 Phase 2 Execution Layer)
+        await walletAdapter.connect();
+        
+        // Get wallet address
         const addr = await walletAdapter.getAddress();
         walletAddress = addr.value;
         walletKind = walletAdapter.kind;
         walletChain = walletAdapter.chain;
         
-        // Get wallet capabilities (v2 Phase 2+)
+        // Get wallet capabilities (v2 Phase 2 Execution Layer)
+        if (walletAdapter.capabilities) {
+          walletCapabilitiesResponse = walletAdapter.capabilities();
+        }
+        
+        // Get wallet capabilities (v2 Phase 2+ - legacy)
         if (walletAdapter.getCapabilities) {
           walletCapabilities = walletAdapter.getCapabilities();
         } else {
@@ -209,6 +245,53 @@ export async function acquire(params: {
             can_sign_message: typeof walletAdapter.signMessage === "function",
             can_sign_transaction: typeof walletAdapter.signTransaction === "function",
           };
+        }
+        
+        // Validate wallet supports requested asset/chain (v2 asset selection)
+        if (walletCapabilitiesResponse && input.asset) {
+          const walletChains = walletCapabilitiesResponse.chains || [];
+          const walletAssets = walletCapabilitiesResponse.assets || [];
+          
+          // Check chain compatibility
+          if (chainId && chainId !== "unknown") {
+            // Map chain_id to wallet chain format
+            const walletChainFormat = chainId === "solana" ? "solana" :
+                                    chainId === "ethereum" || chainId === "base" || chainId === "polygon" || chainId === "arbitrum" ? "evm" :
+                                    chainId;
+            
+            // Check if wallet supports the chain
+            const chainSupported = walletChains.some((c: string) => 
+              c === chainId || 
+              c === walletChainFormat ||
+              (chainId === "ethereum" && (c === "evm" || c === "ethereum")) ||
+              (chainId === "base" && (c === "evm" || c === "base")) ||
+              (chainId === "polygon" && (c === "evm" || c === "polygon")) ||
+              (chainId === "arbitrum" && (c === "evm" || c === "arbitrum"))
+            );
+            
+            if (!chainSupported) {
+              return {
+                ok: false,
+                code: "WALLET_CAPABILITY_MISSING",
+                reason: `Wallet does not support chain '${chainId}'. Supported chains: ${walletChains.join(", ")}`,
+              };
+            }
+          }
+          
+          // Check asset compatibility (if wallet specifies supported assets)
+          if (walletAssets.length > 0 && assetSymbol) {
+            const assetSupported = walletAssets.some((a: string) => 
+              a.toUpperCase() === assetSymbol.toUpperCase()
+            );
+            
+            if (!assetSupported) {
+              return {
+                ok: false,
+                code: "WALLET_CAPABILITY_MISSING",
+                reason: `Wallet does not support asset '${assetSymbol}'. Supported assets: ${walletAssets.join(", ")}`,
+              };
+            }
+          }
         }
         
         // Enforce transaction signing capability if required (v2 Phase 2+)
@@ -225,11 +308,14 @@ export async function acquire(params: {
         return {
           ok: false,
           code: "WALLET_CONNECT_FAILED",
-          reason: error?.message || "Failed to get wallet address",
+          reason: error?.message || "Failed to connect wallet",
         };
       }
     }
   }
+  
+  // Wallet signing (v2 Phase 2 Execution Layer) - happens after acquisition succeeds
+  // We'll handle this after we have the receipt/agreed_price
   
   // Initialize transcript collection if requested (needed for recordLifecycleError)
   const saveTranscript = input.saveTranscript ?? false;
@@ -271,6 +357,10 @@ export async function acquire(params: {
       used: true,
       // Wallet capabilities (v2 Phase 2+)
       capabilities: walletCapabilities,
+      // Asset metadata in wallet block (v2 asset selection)
+      asset: assetSymbol ?? assetId,
+      asset_chain: chainId,
+      asset_decimals: assetDecimals,
     } : undefined,
     // Initialize settlement lifecycle metadata (v1.6.3+)
     settlement_lifecycle: input.settlement?.provider ? {
@@ -3610,6 +3700,66 @@ export async function acquire(params: {
     receipt: finalReceipt,
     offers_eligible: evaluations.length,
   };
+  
+  // Wallet signing (v2 Phase 2 Execution Layer) - happens after acquisition succeeds
+  if (walletAdapter && input.wallet?.requires_signature && walletAdapter.sign) {
+    try {
+      // Check if wallet can sign
+      const caps = walletAdapter.capabilities ? walletAdapter.capabilities() : { can_sign: false, chains: [], assets: [] };
+      if (!caps.can_sign) {
+        // Wallet cannot sign - this should have been caught earlier, but handle gracefully
+        if (transcriptData && transcriptData.wallet) {
+          (transcriptData.wallet as any).signature_error = "Wallet cannot sign";
+        }
+      } else {
+        // Create wallet action
+        const signatureAction = input.wallet.signature_action || {};
+        const walletAction: WalletAction = {
+          action: signatureAction.action || "authorize",
+          asset_symbol: signatureAction.asset_symbol || assetSymbol || assetId,
+          amount: signatureAction.amount ?? (finalReceipt?.agreed_price ?? 0),
+          from: walletAddress!,
+          to: signatureAction.to || finalSelectedProviderPubkey,
+          memo: signatureAction.memo,
+          idempotency_key: signatureAction.idempotency_key || finalIntentId,
+        };
+        
+        // Sign the action
+        walletSignature = await walletAdapter.sign(walletAction);
+        
+        // Record signature in transcript
+        if (transcriptData && transcriptData.wallet && walletSignature) {
+          (transcriptData.wallet as any).adapter = walletKind;
+          (transcriptData.wallet as any).asset = walletAction.asset_symbol;
+          (transcriptData.wallet as any).signer = walletSignature.signer;
+          
+          // Convert signature to hex string for display
+          let signatureHex: string;
+          if (walletSignature.chain === "solana") {
+            const bs58 = (await import("bs58")).default;
+            signatureHex = bs58.encode(walletSignature.signature);
+          } else {
+            signatureHex = "0x" + Array.from(walletSignature.signature).map(b => b.toString(16).padStart(2, "0")).join("");
+          }
+          
+          (transcriptData.wallet as any).signature_metadata = {
+            chain: walletSignature.chain,
+            signer: walletSignature.signer,
+            signature_hex: signatureHex,
+            payload_hash: walletSignature.payload_hash,
+            scheme: walletSignature.scheme,
+          };
+        }
+      }
+    } catch (error: any) {
+      // Wallet signing failed - record error but don't fail acquisition
+      if (transcriptData && transcriptData.wallet) {
+        (transcriptData.wallet as any).signature_error = error?.message || "Failed to sign wallet action";
+      }
+      // Return error code for wallet signing failure
+      // Note: We don't fail the acquisition, but record the error
+    }
+  }
   
   // Build and write transcript if requested
   let transcriptPath: string | undefined;

@@ -33,6 +33,7 @@
     "example:dispute": "tsx examples/dispute-refund/run.ts",
     "example:reconcile": "tsx examples/reconcile-pending/run.ts",
     "example:ethers-wallet": "tsx examples/ethers-wallet/run.ts",
+    "example:ethers-wallet-sign": "tsx examples/ethers-wallet-sign/run.ts",
     "example:solana-wallet-sign": "tsx examples/solana-wallet-sign/run.ts",
     "api:snapshot": "node scripts/api-snapshot.mjs",
     "api:check": "node scripts/api-check.mjs",

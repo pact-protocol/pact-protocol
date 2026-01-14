@@ -36,6 +36,8 @@ export type ReplayResult = {
     artifacts_missing: number;
     settlement_lifecycle_verified: number; // Settlement lifecycle validation (v1.6.3+)
     settlement_lifecycle_failed: number; // Settlement lifecycle validation failures (v1.6.3+)
+    wallet_signatures_verified: number; // Wallet signature verification (v2 Phase 2 Execution Layer)
+    wallet_signatures_failed: number; // Wallet signature verification failures (v2 Phase 2 Execution Layer)
   };
 };
 
@@ -78,6 +80,8 @@ export async function replayTranscript(
     artifacts_missing: 0,
     settlement_lifecycle_verified: 0,
     settlement_lifecycle_failed: 0,
+    wallet_signatures_verified: 0,
+    wallet_signatures_failed: 0,
   };
 
   // Verify credential checks
@@ -701,6 +705,74 @@ export async function replayTranscript(
       }
     }
   }
+  
+  // Wallet signature verification (v2 Phase 2 Execution Layer)
+  if (transcript.wallet && transcript.wallet.signature_metadata) {
+    const sigMeta = transcript.wallet.signature_metadata;
+    
+    // Reconstruct the wallet action from transcript
+    const receipt = transcript.receipt;
+    if (receipt) {
+      const walletAction = {
+        action: "authorize" as const, // Default action type
+        asset_symbol: transcript.wallet.asset || transcript.asset_id || "USDC",
+        amount: receipt.agreed_price || 0,
+        from: transcript.wallet.signer || transcript.wallet.address,
+        to: receipt.seller_agent_id || "",
+        memo: undefined,
+        idempotency_key: transcript.intent_id,
+      };
+      
+      // Try to verify signature if adapter supports it
+      // We need to create a wallet adapter instance to verify
+      // For now, we'll do basic validation of payload_hash
+      try {
+        // Recompute payload hash to verify it matches
+        const payload = JSON.stringify({
+          action: walletAction.action,
+          asset_symbol: walletAction.asset_symbol,
+          amount: walletAction.amount,
+          from: walletAction.from.toLowerCase(),
+          to: walletAction.to.toLowerCase(),
+          memo: walletAction.memo || "",
+          idempotency_key: walletAction.idempotency_key || "",
+        });
+        
+        const encoder = new TextEncoder();
+        const data = encoder.encode(payload);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        
+        let computedHash: string;
+        if (sigMeta.chain === "solana") {
+          const bs58 = (await import("bs58")).default;
+          computedHash = bs58.encode(hashArray);
+        } else {
+          computedHash = "0x" + hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+        }
+        
+        if (computedHash !== sigMeta.payload_hash) {
+          const message = `Wallet signature payload_hash mismatch. Expected ${computedHash}, got ${sigMeta.payload_hash}`;
+          failures.push({
+            code: "WALLET_VERIFY_FAILED",
+            reason: message,
+            context: { wallet_kind: transcript.wallet!.kind, chain: sigMeta.chain },
+          });
+          summary.wallet_signatures_failed++;
+        } else {
+          summary.wallet_signatures_verified++;
+        }
+      } catch (error: any) {
+        const message = `Failed to verify wallet signature: ${error?.message || String(error)}`;
+        failures.push({
+          code: "WALLET_VERIFY_FAILED",
+          reason: message,
+          context: { wallet_kind: transcript.wallet!.kind, chain: sigMeta.chain },
+        });
+        summary.wallet_signatures_failed++;
+      }
+    }
+  }
 
   return {
     ok: failures.length === 0,
@@ -895,6 +967,18 @@ export async function verifyTranscriptFile(
       // Check: valid transitions (pending -> committed/failed/aborted)
       if (event.from_status === "pending" && event.to_status !== "committed" && event.to_status !== "failed" && event.to_status !== "aborted") {
         errors.push(`reconcile_events: invalid transition from ${event.from_status} to ${event.to_status}. Expected committed, failed, or aborted`);
+      }
+    }
+  }
+  
+  // Wallet signature verification failures are already handled in replayTranscript
+  // Convert WALLET_VERIFY_FAILED failures to errors/warnings based on strict mode
+  for (const failure of replayResult.failures) {
+    if (failure.code === "WALLET_VERIFY_FAILED") {
+      if (strict) {
+        errors.push(`WALLET_VERIFY_FAILED: ${failure.reason}`);
+      } else {
+        warnings.push(`WALLET_VERIFY_FAILED: ${failure.reason}`);
       }
     }
   }

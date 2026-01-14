@@ -46,6 +46,46 @@ export interface WalletCapabilities {
 }
 
 /**
+ * Wallet action types (v2 Phase 2 Execution Layer)
+ */
+export type WalletActionType = "authorize" | "transfer" | "refund";
+
+/**
+ * Wallet action (v2 Phase 2 Execution Layer)
+ * Normalized contract for wallet signing requests
+ */
+export interface WalletAction {
+  action: WalletActionType;
+  asset_symbol: string; // e.g., "USDC", "ETH", "SOL"
+  amount: number;
+  from: string; // Address (hex or base58)
+  to: string; // Address (hex or base58)
+  memo?: string; // Optional memo/note
+  idempotency_key?: string; // Optional idempotency key for deduplication
+}
+
+/**
+ * Wallet signature (v2 Phase 2 Execution Layer)
+ * Result of signing a wallet action
+ */
+export interface WalletSignature {
+  chain: string; // Chain identifier
+  signer: string; // Public key/address of signer (hex or base58)
+  signature: Uint8Array; // Raw signature bytes
+  payload_hash: string; // Hash of the action payload (hex)
+  scheme: string; // Signature scheme (e.g., "ed25519", "secp256k1", "eip191")
+}
+
+/**
+ * Wallet capabilities response (v2 Phase 2 Execution Layer)
+ */
+export interface WalletCapabilitiesResponse {
+  can_sign: boolean;
+  chains: string[]; // Supported chains
+  assets: string[]; // Supported asset symbols
+}
+
+/**
  * Chain-agnostic wallet adapter interface
  */
 export interface WalletAdapter {
@@ -64,11 +104,18 @@ export interface WalletAdapter {
   getAddress(): Promise<AddressInfo>;
 
   /**
-   * Connect to the wallet.
+   * Connect to the wallet (v2 Phase 2 Execution Layer).
    * 
-   * @returns Promise resolving to connection result with address and chain
+   * @returns Promise resolving to void (throws on failure)
    */
-  connect(): Promise<WalletConnectResult>;
+  connect(): Promise<void>;
+
+  /**
+   * Get wallet capabilities (v2 Phase 2 Execution Layer).
+   * 
+   * @returns Wallet capabilities including supported chains and assets
+   */
+  capabilities(): WalletCapabilitiesResponse;
 
   /**
    * Sign a message using the connected wallet.
@@ -100,7 +147,27 @@ export interface WalletAdapter {
    * Optional - if not implemented, defaults to unknown chain with no capabilities.
    * 
    * @returns Wallet capabilities describing what operations are supported
+   * @deprecated Use capabilities() instead (v2 Phase 2 Execution Layer)
    */
   getCapabilities?(): WalletCapabilities;
+
+  /**
+   * Sign a wallet action (v2 Phase 2 Execution Layer).
+   * Only available if capabilities().can_sign is true.
+   * 
+   * @param action - Wallet action to sign
+   * @returns Promise resolving to wallet signature
+   */
+  sign?(action: WalletAction): Promise<WalletSignature>;
+
+  /**
+   * Verify a wallet signature (v2 Phase 2 Execution Layer).
+   * Optional - if not implemented, verification is skipped.
+   * 
+   * @param signature - Wallet signature to verify
+   * @param action - Original wallet action
+   * @returns true if signature is valid, false otherwise
+   */
+  verify?(signature: WalletSignature, action: WalletAction): boolean;
 }
 

@@ -8,13 +8,13 @@
 // Shared wallet types
 export * from "./types";
 export type { AddressInfo } from "./ethers";
-export type { WalletCapabilities } from "./types";
+export type { WalletCapabilities, WalletAction, WalletSignature, WalletCapabilitiesResponse } from "./types";
 
 // EthersWallet (EVM)
-export { EthersWalletAdapter as EthersWallet, WALLET_CONNECT_FAILED, WALLET_SIGN_FAILED, ETHERS_WALLET_KIND, EVM_CHAIN } from "./ethers";
+export { EthersWalletAdapter as EthersWallet, WALLET_CONNECT_FAILED, WALLET_SIGN_FAILED, WALLET_VERIFY_FAILED, ETHERS_WALLET_KIND, EVM_CHAIN } from "./ethers";
 export type { EthersWalletOptions } from "./ethers";
 
 // SolanaWallet
-export { SolanaWalletAdapter as SolanaWallet, SOLANA_WALLET_KIND, SOLANA_CHAIN } from "./solana";
+export { SolanaWalletAdapter as SolanaWallet, SOLANA_WALLET_KIND, SOLANA_CHAIN, WALLET_CONNECT_FAILED as SOLANA_WALLET_CONNECT_FAILED, WALLET_SIGN_FAILED as SOLANA_WALLET_SIGN_FAILED, WALLET_VERIFY_FAILED as SOLANA_WALLET_VERIFY_FAILED } from "./solana";
 export type { SolanaWalletOptions } from "./solana";
 

@@ -5,7 +5,7 @@
  * Throws unless properly configured with a real wallet implementation.
  */
 
-import type { WalletAdapter, Chain, Address, WalletConnectResult, WalletCapabilities } from "./types";
+import type { WalletAdapter, Chain, Address, WalletConnectResult, WalletCapabilities, WalletAction, WalletSignature, WalletCapabilitiesResponse } from "./types";
 import type { AddressInfo } from "./ethers";
 
 export class ExternalWalletAdapter implements WalletAdapter {
@@ -38,7 +38,31 @@ export class ExternalWalletAdapter implements WalletAdapter {
     };
   }
 
-  async connect(): Promise<WalletConnectResult> {
+  /**
+   * Connect to the wallet (v2 Phase 2 Execution Layer).
+   * 
+   * @returns Promise resolving to void (throws on failure)
+   */
+  async connect(): Promise<void> {
+    // External wallet adapter requires configuration
+    // In a real implementation, this would connect to MetaMask, Coinbase Wallet, etc.
+    if (!this.params || !this.params.provider) {
+      throw new Error("External wallet adapter not configured. Provide 'provider' in params.");
+    }
+
+    // Placeholder: would connect to actual wallet provider
+    throw new Error(
+      `External wallet adapter not implemented. Provider: ${this.params.provider}`
+    );
+  }
+
+  /**
+   * Connect to the wallet (legacy method for backward compatibility).
+   * 
+   * @returns Promise resolving to connection result with address and chain
+   * @deprecated Use connect() instead (v2 Phase 2 Execution Layer)
+   */
+  async connectLegacy(): Promise<WalletConnectResult> {
     // External wallet adapter requires configuration
     // In a real implementation, this would connect to MetaMask, Coinbase Wallet, etc.
     if (!this.params || !this.params.provider) {
@@ -70,12 +94,26 @@ export class ExternalWalletAdapter implements WalletAdapter {
    * ExternalWalletAdapter is a placeholder - no capabilities by default.
    * 
    * @returns Wallet capabilities (unknown chain, no signing capabilities)
+   * @deprecated Use capabilities() instead (v2 Phase 2 Execution Layer)
    */
   getCapabilities(): WalletCapabilities {
     return {
       chain: "unknown",
       can_sign_message: false,
       can_sign_transaction: false,
+    };
+  }
+
+  /**
+   * Get wallet capabilities (v2 Phase 2 Execution Layer).
+   * 
+   * @returns Wallet capabilities including supported chains and assets
+   */
+  capabilities(): WalletCapabilitiesResponse {
+    return {
+      can_sign: false,
+      chains: [],
+      assets: [],
     };
   }
 }

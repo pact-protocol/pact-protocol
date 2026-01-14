@@ -151,6 +151,19 @@ export type TranscriptV1 = {
       can_sign_message: boolean;
       can_sign_transaction: boolean;
     };
+    // Wallet execution layer (v2 Phase 2 Execution Layer)
+    adapter?: string; // Wallet adapter kind
+    asset?: string; // Asset symbol used (v2 asset selection)
+    asset_chain?: string; // Asset chain (v2 asset selection)
+    asset_decimals?: number; // Asset decimals (v2 asset selection)
+    signer?: string; // Public key/address of signer
+    signature_metadata?: {
+      chain: string; // Chain identifier
+      signer: string; // Public key/address of signer
+      signature_hex?: string; // Signature as hex string (for display, not full bytes)
+      payload_hash: string; // Hash of the action payload
+      scheme: string; // Signature scheme (e.g., "ed25519", "eip191")
+    };
   };
   
   // Outcome summary
