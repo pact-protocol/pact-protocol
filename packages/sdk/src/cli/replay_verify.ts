@@ -18,6 +18,28 @@ import * as path from "path";
 import minimist from "minimist";
 import { verifyTranscriptFile } from "../transcript/replay";
 
+function isTerminalStatus(status: unknown): boolean {
+  return status === "committed" || status === "failed" || status === "aborted";
+}
+
+function isTerminalTranscript(transcript: any): boolean {
+  const lifecycle = transcript?.settlement_lifecycle;
+
+  // If lifecycle is missing (older transcripts / non-lifecycle settlements),
+  // treat as terminal for the purpose of "strict-reconciled" filtering.
+  if (!lifecycle) return true;
+
+  if (isTerminalStatus(lifecycle.status)) return true;
+
+  // Some transcripts may have status "pending" but include a terminal event.
+  const events = lifecycle.settlement_events;
+  if (Array.isArray(events)) {
+    return events.some((e: any) => isTerminalStatus(e?.status));
+  }
+
+  return false;
+}
+
 /**
  * Recursively find all .json files in a directory.
  */
@@ -45,19 +67,21 @@ function findJsonFiles(dir: string): string[] {
 async function main() {
   const raw = process.argv.slice(2).filter((x) => x !== "--");
   const args = minimist(raw, {
-    boolean: ["strict", "terminal-only"],
+    boolean: ["strict", "terminal-only", "reconciled-only"],
   });
   
   // Get positional arguments (paths to verify)
   const paths = args._;
   const strict = args.strict || false;
   const terminalOnly = args["terminal-only"] || false;
+  const reconciledOnly = args["reconciled-only"] || false;
   
   if (paths.length === 0) {
-    console.error("Usage: pnpm replay:verify -- <path> [--strict] [--terminal-only]");
+    console.error("Usage: pnpm replay:verify -- <path> [--strict] [--terminal-only] [--reconciled-only]");
     console.error("  <path> can be a file or directory");
     console.error("  --strict: Treat pending settlements without resolution as errors (default: warnings)");
     console.error("  --terminal-only: When used with --strict, skip pending transcripts with a warning");
+    console.error("  --reconciled-only: Only verify reconciled transcripts (*-reconciled-*.json) and terminal transcripts");
     process.exit(1);
   }
   
@@ -91,6 +115,45 @@ async function main() {
   if (files.length === 0) {
     console.error(`No .json files found in: ${inputPath}`);
     process.exit(1);
+  }
+
+  // Optional filtering: only verify reconciled transcripts and terminal transcripts.
+  // This enables "strict with no skips" in folders that include pending snapshots.
+  if (reconciledOnly) {
+    const filtered: string[] = [];
+    let excluded = 0;
+
+    for (const file of files) {
+      const base = path.basename(file);
+      if (base.includes("-reconciled-")) {
+        filtered.push(file);
+        continue;
+      }
+
+      // Keep terminal transcripts (including older transcripts without lifecycle metadata).
+      try {
+        const content = fs.readFileSync(file, "utf-8");
+        const transcript = JSON.parse(content);
+        if (isTerminalTranscript(transcript)) {
+          filtered.push(file);
+        } else {
+          excluded++;
+        }
+      } catch {
+        // If unreadable/unparseable, keep it so verification reports a real error.
+        filtered.push(file);
+      }
+    }
+
+    files = filtered;
+    if (files.length === 0) {
+      console.error(`No reconciled or terminal transcripts found in: ${inputPath}`);
+      process.exit(1);
+    }
+
+    if (excluded > 0) {
+      console.log(`ℹ️  Filtered out ${excluded} non-terminal (pending) transcript(s) due to --reconciled-only`);
+    }
   }
   
   // Verify each file
