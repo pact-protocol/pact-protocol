@@ -5,6 +5,7 @@
   "private": true,
   "dependencies": {
     "@pact/sdk": "workspace:*",
+    "@pact/provider-adapter": "workspace:*",
     "bs58": "^5.0.0"
   },
   "devDependencies": {

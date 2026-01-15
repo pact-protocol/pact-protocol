@@ -78,10 +78,20 @@ async function main() {
   
   if (paths.length === 0) {
     console.error("Usage: pnpm replay:verify -- <path> [--strict] [--terminal-only] [--reconciled-only]");
-    console.error("  <path> can be a file or directory");
-    console.error("  --strict: Treat pending settlements without resolution as errors (default: warnings)");
-    console.error("  --terminal-only: When used with --strict, skip pending transcripts with a warning");
-    console.error("  --reconciled-only: Only verify reconciled transcripts (*-reconciled-*.json) and terminal transcripts");
+    console.error("");
+    console.error("Arguments:");
+    console.error("  <path>                    File or directory containing transcript JSON files");
+    console.error("");
+    console.error("Options:");
+    console.error("  --strict                  Treat pending settlements without resolution as errors (default: warnings)");
+    console.error("  --terminal-only           When used with --strict, skip pending transcripts with a warning");
+    console.error("  --reconciled-only         Only verify reconciled transcripts (*-reconciled-*.json) and terminal transcripts");
+    console.error("");
+    console.error("Examples:");
+    console.error("  pnpm replay:verify -- .pact/transcripts");
+    console.error("  pnpm replay:verify -- transcript.json");
+    console.error("  pnpm replay:verify -- .pact/transcripts --strict");
+    console.error("  pnpm replay:verify -- .pact/transcripts --strict --terminal-only");
     process.exit(1);
   }
   
@@ -91,7 +101,8 @@ async function main() {
   let files: string[] = [];
   
   if (!fs.existsSync(inputPath)) {
-    console.error(`Error: ${inputPath} does not exist`);
+    console.error(`Error: Path does not exist: ${inputPath}`);
+    console.error(`Hint: Use an absolute path or a path relative to the current directory.`);
     process.exit(1);
   }
   
@@ -103,17 +114,19 @@ async function main() {
   } else if (stat.isFile()) {
     // Single file
     if (!inputPath.endsWith(".json")) {
-      console.error(`Error: ${inputPath} is not a .json file`);
+      console.error(`Error: File must be a .json file: ${inputPath}`);
+      console.error(`Hint: Transcript files must have .json extension.`);
       process.exit(1);
     }
     files = [path.resolve(inputPath)];
   } else {
-    console.error(`Error: ${inputPath} is not a file or directory`);
+    console.error(`Error: Path is not a file or directory: ${inputPath}`);
     process.exit(1);
   }
   
   if (files.length === 0) {
-    console.error(`No .json files found in: ${inputPath}`);
+    console.error(`Error: No .json files found in: ${inputPath}`);
+    console.error(`Hint: Ensure the directory contains transcript JSON files.`);
     process.exit(1);
   }
 
@@ -147,7 +160,8 @@ async function main() {
 
     files = filtered;
     if (files.length === 0) {
-      console.error(`No reconciled or terminal transcripts found in: ${inputPath}`);
+      console.error(`Error: No reconciled or terminal transcripts found in: ${inputPath}`);
+      console.error(`Hint: Use --reconciled-only only with directories containing reconciled transcripts (*-reconciled-*.json) or terminal transcripts.`);
       process.exit(1);
     }
 

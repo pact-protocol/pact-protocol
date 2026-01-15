@@ -16,3 +16,7 @@ export { createTestZkKyaVerifier } from "../kya/zk/verifier";
 
 // Test settlement providers
 export { MockSettlementProvider } from "../settlement/mock";
+
+// ML negotiation scorer (Phase 6)
+export { StubMLScorer } from "../negotiation/ml/stub_scorer";
+export type { MLScorer, MLScorerInput, MLScorerOutput } from "../negotiation/ml/types";

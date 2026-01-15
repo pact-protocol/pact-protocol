@@ -128,6 +128,16 @@ export type TranscriptV1 = {
         reason?: string;
       };
     }>;
+    // ML negotiation metadata (Phase 6)
+    ml?: {
+      scorer: string; // Scorer type used (e.g., "stub")
+      selected_candidate_idx?: number; // Index of selected candidate in last round
+      top_scores?: Array<{
+        idx: number; // Candidate index
+        score: number; // Score assigned
+        reason?: string; // Optional explanation
+      }>; // Top 3 scored candidates from last round
+    };
   };
   
   // Negotiation rounds detail (v2.3+)

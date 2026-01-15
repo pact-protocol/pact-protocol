@@ -30,14 +30,11 @@ import type { NegotiationStrategy } from "../negotiation/strategy";
 import { BaselineNegotiationStrategy } from "../negotiation/baseline";
 import { BandedConcessionStrategy } from "../negotiation/banded_concession";
 import { AggressiveIfUrgentStrategy } from "../negotiation/aggressive_if_urgent";
+import { MLNegotiationStrategy } from "../negotiation/ml_strategy";
 import type { NegotiationResult } from "../negotiation/types";
-import type { WalletAdapter, WalletConnectResult, WalletCapabilities, WalletAction, WalletSignature } from "../wallets/types";
+import type { WalletAdapter, WalletConnectResult, WalletCapabilities, WalletAction, WalletSignature, AddressInfo } from "../wallets/types";
 import { ExternalWalletAdapter } from "../wallets/external";
-import { EthersWalletAdapter } from "../wallets/ethers";
-import type { AddressInfo } from "../wallets/types";
-import { SolanaWalletAdapter, SOLANA_WALLET_KIND } from "../wallets/solana";
-import { MetaMaskWalletAdapter, METAMASK_WALLET_KIND } from "../wallets/metamask";
-import { CoinbaseWalletAdapter, COINBASE_WALLET_KIND } from "../wallets/coinbase_wallet";
+import { EthersWallet, SOLANA_WALLET_KIND, SolanaWallet, METAMASK_WALLET_KIND, MetaMaskWallet, COINBASE_WALLET_KIND, CoinbaseWallet } from "../wallets/index";
 import { convertZkKyaInputToProof } from "../kya/zk";
 import { DefaultZkKyaVerifier, type ZkKyaVerifier } from "../kya/zk/verifier";
 import type { ZkKyaVerificationResult } from "../kya/zk/types";
@@ -174,15 +171,15 @@ export async function acquire(params: {
         
         if (wallet) {
           // Use provided wallet instance (synchronous)
-          walletAdapter = new EthersWalletAdapter({ wallet });
+          walletAdapter = new EthersWallet({ wallet });
         } else if (privateKey) {
           // Use factory method for private key (async, ESM-compatible)
-          walletAdapter = await EthersWalletAdapter.create(privateKey);
+          walletAdapter = await EthersWallet.create(privateKey);
         } else {
           return {
             ok: false,
             code: "WALLET_CONNECT_FAILED",
-            reason: "EthersWalletAdapter requires either privateKey or wallet in params",
+            reason: "EthersWallet requires either privateKey or wallet in params",
           };
         }
         walletKind = "ethers";
@@ -200,12 +197,12 @@ export async function acquire(params: {
         const keypair = input.wallet.params?.keypair as any;
         
         if (keypair || secretKey) {
-          walletAdapter = new SolanaWalletAdapter({ keypair, secretKey });
+          walletAdapter = new SolanaWallet({ keypair, secretKey });
         } else {
           return {
             ok: false,
             code: "WALLET_CONNECT_FAILED",
-            reason: "SolanaWalletAdapter requires keypair or secretKey in params",
+            reason: "SolanaWallet requires keypair or secretKey in params",
           };
         }
         walletKind = SOLANA_WALLET_KIND;
@@ -220,7 +217,7 @@ export async function acquire(params: {
       // MetaMask wallet adapter (v2 Phase 2A)
       try {
         const injected = input.wallet.params?.injected as any;
-        walletAdapter = new MetaMaskWalletAdapter({ injected });
+        walletAdapter = new MetaMaskWallet({ injected });
         walletKind = METAMASK_WALLET_KIND;
       } catch (error: any) {
         return {
@@ -233,7 +230,7 @@ export async function acquire(params: {
       // Coinbase Wallet adapter (v2 Phase 2A)
       try {
         const injected = input.wallet.params?.injected as any;
-        walletAdapter = new CoinbaseWalletAdapter({ injected });
+        walletAdapter = new CoinbaseWallet({ injected });
         walletKind = COINBASE_WALLET_KIND;
       } catch (error: any) {
         return {
@@ -2330,6 +2327,8 @@ export async function acquire(params: {
     negotiationStrategy = new BandedConcessionStrategy();
   } else if (negotiationStrategyName === "aggressive_if_urgent") {
     negotiationStrategy = new AggressiveIfUrgentStrategy();
+  } else if (negotiationStrategyName === "ml_stub") {
+    negotiationStrategy = new MLNegotiationStrategy(input.negotiation?.params);
   } else {
     // Default to baseline for unknown strategies
     negotiationStrategy = new BaselineNegotiationStrategy();
@@ -2347,7 +2346,7 @@ export async function acquire(params: {
     strategy_id?: string; // Strategy used for this round (v2.3.1+)
   }> = [];
   
-  if (plan.regime === "negotiated" && (negotiationStrategyName === "banded_concession" || negotiationStrategyName === "aggressive_if_urgent")) {
+  if (plan.regime === "negotiated" && (negotiationStrategyName === "banded_concession" || negotiationStrategyName === "aggressive_if_urgent" || negotiationStrategyName === "ml_stub")) {
     // Run negotiation rounds for negotiated regime with banded_concession
     const effectiveMaxRounds = input.negotiation?.params?.max_rounds as number | undefined ?? plan.maxRounds;
     const bandPct = input.negotiation?.params?.band_pct as number | undefined ?? 0.1;
@@ -2495,12 +2494,20 @@ export async function acquire(params: {
   }
 
   // Use negotiated price (for negotiated regime with rounds, this is the accepted ask price or final counter)
-  const negotiatedPrice = plan.regime === "negotiated" && (negotiationStrategyName === "banded_concession" || negotiationStrategyName === "aggressive_if_urgent") && negotiationRounds.length > 0
+  const negotiatedPrice = plan.regime === "negotiated" && (negotiationStrategyName === "banded_concession" || negotiationStrategyName === "aggressive_if_urgent" || negotiationStrategyName === "ml_stub") && negotiationRounds.length > 0
     ? (negotiationRounds[negotiationRounds.length - 1].accepted ? selectedAskPrice : negotiationRounds[negotiationRounds.length - 1].counter_price)
     : (negotiationResult?.agreed_price ?? selectedAskPrice);
 
   // Record negotiation in transcript
   if (transcriptData && negotiationResult) {
+    // Get ML metadata (captured during rounds or from strategy)
+    let mlMetadata: { scorer: string; selected_candidate_idx: number; top_scores?: Array<{idx: number; score: number; reason?: string}> } | undefined;
+    if (negotiationStrategyName === "ml_stub") {
+      if (negotiationStrategy instanceof MLNegotiationStrategy) {
+        mlMetadata = negotiationStrategy.getMLMetadata() || undefined;
+      }
+    }
+    
     transcriptData.negotiation = {
       strategy: negotiationStrategyName,
       rounds_used: negotiationResult.rounds_used,
@@ -2518,6 +2525,7 @@ export async function acquire(params: {
           reason: "reason" in entry.decision ? entry.decision.reason : undefined,
         },
       })),
+      ...(mlMetadata ? { ml: mlMetadata } : {}),
     };
     
     // Record negotiation rounds detail (v2.3+)

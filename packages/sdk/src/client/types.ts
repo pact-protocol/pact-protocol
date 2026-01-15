@@ -32,7 +32,7 @@ export type AcquireInput = {
   };
   // Optional negotiation strategy (v2.1+)
   negotiation?: {
-    strategy?: "baseline" | "banded_concession" | "aggressive_if_urgent"; // Negotiation strategy (default: "baseline")
+    strategy?: "baseline" | "banded_concession" | "aggressive_if_urgent" | "ml_stub"; // Negotiation strategy (default: "baseline")
     params?: Record<string, unknown>; // Parameters for negotiation strategy
   };
   // Optional asset specification (v2.2+)
