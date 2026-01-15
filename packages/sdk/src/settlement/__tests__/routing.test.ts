@@ -584,5 +584,53 @@ describe("Settlement Provider Routing", () => {
     });
     expect(result3.provider).toBe("stripe_like"); // Rule matches
   });
+  
+  it("should route to stripe_live for large amounts when rule matches", () => {
+    const policy = createDefaultPolicy();
+    policy.settlement_routing = {
+      default_provider: "mock", // Default remains mock
+      rules: [
+        {
+          when: {
+            min_amount: 1.0, // Large amount threshold
+          },
+          use: "stripe_live", // v2 Phase 3: Route large amounts to stripe_live
+        },
+      ],
+    };
+    const compiled = compilePolicy(policy);
+    
+    // Test with large amount (matches rule)
+    const result1 = selectSettlementProvider(compiled, {
+      amount: 1.5, // Above min_amount threshold
+      mode: "hash_reveal",
+      trustTier: "untrusted",
+      trustScore: 0.0,
+    });
+    expect(result1.provider).toBe("stripe_live");
+    expect(result1.matchedRuleIndex).toBe(0);
+    expect(result1.reason).toContain("stripe_live");
+    
+    // Test with small amount (doesn't match, uses default)
+    const result2 = selectSettlementProvider(compiled, {
+      amount: 0.0001, // Below min_amount threshold
+      mode: "hash_reveal",
+      trustTier: "untrusted",
+      trustScore: 0.0,
+    });
+    expect(result2.provider).toBe("mock"); // Default for small amounts
+    expect(result2.matchedRuleIndex).toBeUndefined();
+    expect(result2.reason).toContain("default_provider");
+    
+    // Test at threshold (inclusive, so matches)
+    const result3 = selectSettlementProvider(compiled, {
+      amount: 1.0, // Exactly at min_amount (inclusive)
+      mode: "hash_reveal",
+      trustTier: "untrusted",
+      trustScore: 0.0,
+    });
+    expect(result3.provider).toBe("stripe_live");
+    expect(result3.matchedRuleIndex).toBe(0);
+  });
 });
 

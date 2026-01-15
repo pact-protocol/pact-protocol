@@ -178,7 +178,7 @@ export type TranscriptV1 = {
   
   // Settlement lifecycle metadata (v1.6.3+)
   settlement_lifecycle?: {
-    provider?: string; // "mock" | "external" | "stripe_like"
+    provider?: string; // "mock" | "external" | "stripe_like" | "stripe_live" // v2 Phase 3: Added stripe_live
     idempotency_key?: string; // Idempotency key from input.settlement.idempotency_key
     handle_id?: string; // Settlement handle ID from prepare()
     status?: "prepared" | "committed" | "aborted" | "pending" | "failed"; // Lifecycle status (v1.7.2+: pending, failed)
@@ -207,7 +207,7 @@ export type TranscriptV1 = {
     idx: number; // Attempt index (0-based, 0 = first attempt)
     provider_pubkey: string; // Provider public key (b58)
     provider_id?: string; // Provider ID from directory
-    settlement_provider?: string; // Settlement provider used ("mock", "stripe_like", "external")
+    settlement_provider?: string; // Settlement provider used ("mock", "stripe_like", "external", "stripe_live") // v2 Phase 3: Added stripe_live
     outcome: "success" | "failed"; // Outcome of this attempt
     failure_code?: string; // Failure code if outcome is "failed"
     failure_reason?: string; // Failure reason if outcome is "failed"
@@ -270,7 +270,7 @@ export type TranscriptV1 = {
     idx: number; // Attempt index (0-based)
     provider_pubkey: string; // Provider public key (b58)
     provider_id?: string; // Provider ID from directory
-    settlement_provider?: string; // Settlement provider used ("mock", "stripe_like", "external")
+    settlement_provider?: string; // Settlement provider used ("mock", "stripe_like", "external", "stripe_live") // v2 Phase 3: Added stripe_live
     ticks_paid: number; // Number of ticks paid in this attempt
     paid_amount: number; // Amount paid in this attempt
     outcome: "success" | "failed"; // Outcome of this attempt

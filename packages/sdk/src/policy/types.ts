@@ -181,11 +181,11 @@ export interface SettlementRoutingRule {
     min_trust_tier?: "untrusted" | "low" | "trusted";
     min_trust_score?: number;
   };
-  use: "mock" | "stripe_like" | "external";
+  use: "mock" | "stripe_like" | "external" | "stripe_live"; // v2 Phase 3: Added stripe_live
 }
 
 export interface SettlementRouting {
-  default_provider: "mock" | "stripe_like" | "external";
+  default_provider: "mock" | "stripe_like" | "external" | "stripe_live"; // v2 Phase 3: Added stripe_live (but default remains "mock")
   rules: SettlementRoutingRule[];
 }
 

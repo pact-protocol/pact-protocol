@@ -9,9 +9,10 @@ import type { SettlementProvider } from "./provider";
 import { MockSettlementProvider } from "./mock";
 import { ExternalSettlementProvider, type ExternalSettlementProviderConfig } from "./external";
 import { StripeLikeSettlementProvider, type StripeLikeSettlementProviderConfig } from "./stripe_like";
+import { StripeLiveSettlementProvider, validateStripeLiveConfig } from "./stripe_live";
 
 export interface SettlementProviderConfig {
-  provider: "mock" | "external" | "stripe_like";
+  provider: "mock" | "external" | "stripe_like" | "stripe_live";
   params?: Record<string, unknown>; // Parameters for external provider
   idempotency_key?: string; // Optional idempotency key (stored for lifecycle operations)
 }
@@ -60,8 +61,20 @@ export function createSettlementProvider(config: SettlementProviderConfig): Sett
       return new ExternalSettlementProvider(externalConfig);
     }
     
+    case "stripe_live": {
+      // v2 Phase 3: Stripe Live boundary provider
+      // Validate config from params + env
+      const validation = validateStripeLiveConfig(config.params || {});
+      
+      if (!validation.ok) {
+        throw new Error(`Stripe Live settlement provider configuration invalid: ${validation.reason}`);
+      }
+      
+      return new StripeLiveSettlementProvider(validation.config);
+    }
+    
     default:
-      throw new Error(`Unknown settlement provider type: ${config.provider}. Must be "mock", "stripe_like", or "external"`);
+      throw new Error(`Unknown settlement provider type: ${config.provider}. Must be "mock", "stripe_like", "stripe_live", or "external"`);
   }
 }
 

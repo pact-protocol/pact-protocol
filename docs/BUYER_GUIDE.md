@@ -104,6 +104,59 @@ const settlement = new ExternalSettlementProvider({
 });
 ```
 
+### 4. Stripe Live Settlement Provider (Boundary Only)
+
+**v2 Phase 3:** Boundary/skeleton implementation for Stripe Live integration.
+
+**What it is:**
+- Configuration interface for Stripe Live integration
+- Validates environment variables and parameters
+- Provides a clear boundary for external integration
+
+**What it's not:**
+- **No network calls** - All operational methods return "not implemented" errors
+- **No Stripe SDK usage** - This is a skeleton only
+- **Not functional** - Must be replaced with actual Stripe API integration in your service
+
+**Configuration:**
+
+Set environment variables:
+```bash
+export PACT_STRIPE_API_KEY="sk_test_..."  # Required if enabled=true
+export PACT_STRIPE_MODE="sandbox"          # Optional: "sandbox" (default) or "live"
+export PACT_STRIPE_ENABLED="true"          # Optional: enable provider (requires API key)
+```
+
+Use in acquire():
+```typescript
+const result = await acquire({
+  input: {
+    // ...
+    settlement: {
+      provider: "stripe_live",
+      params: {
+        mode: "sandbox",              // Optional: "sandbox" or "live" (default: "sandbox")
+        account_id: "acct_123",       // Optional: Stripe account ID
+        idempotency_prefix: "pact-", // Optional: prefix for idempotency keys
+        enabled: true,                // Optional: enable provider (requires PACT_STRIPE_API_KEY)
+      },
+    },
+  },
+  // ...
+});
+```
+
+**Important Notes:**
+- **No network calls in OSS repo** - This is a boundary only
+- **Integrate in your own service** - Replace the skeleton with actual Stripe API calls
+- **API key never logged** - Secrets are redacted from error messages and transcripts
+- **Deterministic failures** - All methods return "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED" errors
+
+**Validation:**
+- `enabled=true` requires `PACT_STRIPE_API_KEY` environment variable
+- `mode` must be "sandbox" or "live"
+- Unknown properties are rejected
+
 ## Transcripts
 
 Transcripts are JSON files that record the entire acquisition process:

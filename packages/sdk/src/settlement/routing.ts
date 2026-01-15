@@ -15,7 +15,7 @@ export interface SettlementRoutingContext {
 }
 
 export interface SettlementRoutingResult {
-  provider: "mock" | "stripe_like" | "external";
+  provider: "mock" | "stripe_like" | "external" | "stripe_live"; // v2 Phase 3: Added stripe_live
   matchedRuleIndex?: number;
   reason: string;
 }
