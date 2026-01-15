@@ -75,3 +75,7 @@ export * from "./wallets/index";
 
 // Security (v2 Phase 4)
 export * from "./security/index";
+
+// ZK-KYA (v2 Phase 5)
+export * from "./kya/zk/index";
+export type { ZkKyaVerifier } from "./kya/zk/verifier";

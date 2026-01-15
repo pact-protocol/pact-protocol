@@ -38,6 +38,9 @@ import type { AddressInfo } from "../wallets/types";
 import { SolanaWalletAdapter, SOLANA_WALLET_KIND } from "../wallets/solana";
 import { MetaMaskWalletAdapter, METAMASK_WALLET_KIND } from "../wallets/metamask";
 import { CoinbaseWalletAdapter, COINBASE_WALLET_KIND } from "../wallets/coinbase_wallet";
+import { convertZkKyaInputToProof } from "../kya/zk";
+import { DefaultZkKyaVerifier, type ZkKyaVerifier } from "../kya/zk/verifier";
+import type { ZkKyaVerificationResult } from "../kya/zk/types";
 // Import test adapter only in test environment
 // Use dynamic require to avoid issues in production builds
 let TestWalletAdapter: any;
@@ -695,6 +698,128 @@ export async function acquire(params: {
 
   const compiled = compilePolicy(validated.policy);
   const guard = new DefaultPolicyGuard(compiled);
+  
+  // v2 Phase 5: ZK-KYA verification (policy-gated)
+  const zkKyaConfig = compiled.base.base?.kya?.zk_kya;
+  let zkKyaVerifier: ZkKyaVerifier | undefined = new DefaultZkKyaVerifier();
+  let zkKyaVerificationResult: ZkKyaVerificationResult | undefined;
+  let zkKyaProof: import("../kya/zk/types").ZkKyaProof | undefined;
+  
+  if (zkKyaConfig?.required) {
+    // ZK-KYA is required - verify proof
+    if (!input.identity?.buyer?.zk_kya_proof) {
+      return {
+        ok: false,
+        code: "ZK_KYA_REQUIRED",
+        reason: "ZK-KYA proof is required by policy but not provided",
+        ...(explain ? { explain } : {}),
+      };
+    }
+    
+    const zkKyaInput = input.identity.buyer.zk_kya_proof;
+    const now = nowFn ? nowFn() : Date.now();
+    
+    // Check expiry if provided
+    if (zkKyaInput.expires_at_ms && now > zkKyaInput.expires_at_ms) {
+      return {
+        ok: false,
+        code: "ZK_KYA_EXPIRED",
+        reason: `ZK-KYA proof expired at ${zkKyaInput.expires_at_ms}, current time is ${now}`,
+        ...(explain ? { explain } : {}),
+      };
+    }
+    
+    // Convert input to proof (hashing public inputs and proof bytes)
+    const converted = convertZkKyaInputToProof(zkKyaInput);
+    zkKyaProof = converted.proof;
+    
+    // Check issuer requirements
+    if (zkKyaConfig.require_issuer) {
+      if (!zkKyaProof.issuer_id) {
+        return {
+          ok: false,
+          code: "ZK_KYA_ISSUER_NOT_ALLOWED",
+          reason: "ZK-KYA proof requires issuer_id but none provided",
+          ...(explain ? { explain } : {}),
+        };
+      }
+      
+      if (zkKyaConfig.allowed_issuers && zkKyaConfig.allowed_issuers.length > 0) {
+        if (!zkKyaConfig.allowed_issuers.includes(zkKyaProof.issuer_id)) {
+          return {
+            ok: false,
+            code: "ZK_KYA_ISSUER_NOT_ALLOWED",
+            reason: `ZK-KYA issuer '${zkKyaProof.issuer_id}' not in allowed list: ${zkKyaConfig.allowed_issuers.join(", ")}`,
+            ...(explain ? { explain } : {}),
+          };
+        }
+      }
+    }
+    
+    // Verify proof using verifier
+    zkKyaVerificationResult = await zkKyaVerifier.verify({
+      agent_id: buyerId,
+      proof: zkKyaProof,
+      now_ms: now,
+    });
+    
+    if (!zkKyaVerificationResult.ok) {
+      return {
+        ok: false,
+        code: zkKyaVerificationResult.reason as any || "ZK_KYA_INVALID",
+        reason: zkKyaVerificationResult.reason || "ZK-KYA proof verification failed",
+        ...(explain ? { explain } : {}),
+      };
+    }
+    
+    // Check minimum tier if required
+    if (zkKyaConfig.min_tier && zkKyaVerificationResult.tier) {
+      const tierOrder: Record<"untrusted" | "low" | "trusted", number> = { untrusted: 0, low: 1, trusted: 2 };
+      const minTierOrder = tierOrder[zkKyaConfig.min_tier];
+      const proofTierOrder = tierOrder[zkKyaVerificationResult.tier];
+      
+      if (proofTierOrder < minTierOrder) {
+        return {
+          ok: false,
+          code: "ZK_KYA_TIER_TOO_LOW",
+          reason: `ZK-KYA trust tier '${zkKyaVerificationResult.tier}' is below required minimum '${zkKyaConfig.min_tier}'`,
+          ...(explain ? { explain } : {}),
+        };
+      }
+    }
+  } else if (input.identity?.buyer?.zk_kya_proof) {
+    // ZK-KYA not required but proof provided - convert and record metadata (optional)
+    const converted = convertZkKyaInputToProof(input.identity.buyer.zk_kya_proof);
+    zkKyaProof = converted.proof;
+    const now = nowFn ? nowFn() : Date.now();
+    
+    // Optionally verify (but don't fail if verification fails since it's not required)
+    zkKyaVerificationResult = await zkKyaVerifier.verify({
+      agent_id: buyerId,
+      proof: zkKyaProof,
+      now_ms: now,
+    });
+  }
+  
+  // Record ZK-KYA in transcript if proof was provided (v2 Phase 5)
+  if (zkKyaProof && transcriptData) {
+    transcriptData.zk_kya = {
+      scheme: zkKyaProof.scheme,
+      circuit_id: zkKyaProof.circuit_id,
+      issuer_id: zkKyaProof.issuer_id,
+      public_inputs_hash: zkKyaProof.public_inputs_hash,
+      proof_hash: zkKyaProof.proof_hash,
+      issued_at_ms: zkKyaProof.issued_at_ms,
+      expires_at_ms: zkKyaProof.expires_at_ms,
+      verification: {
+        ok: zkKyaVerificationResult?.ok ?? false,
+        tier: zkKyaVerificationResult?.tier,
+        trust_score: zkKyaVerificationResult?.trust_score,
+        reason: zkKyaVerificationResult?.reason,
+      },
+      meta: zkKyaProof.meta,
+    };
+  }
 
   // 2) Compute market stats from store (if provided)
   let p50: number | null = null;

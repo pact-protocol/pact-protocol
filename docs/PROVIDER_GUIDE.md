@@ -163,6 +163,56 @@ const policy = createDefaultPolicy({
 });
 ```
 
+## ZK-KYA Identity Verification (v2 Phase 5)
+
+Providers can require buyers to provide zero-knowledge proof-based identity verification (ZK-KYA) to prove their identity and credentials. This is configured in the provider's policy.
+
+### Requiring ZK-KYA from Buyers
+
+To require ZK-KYA proofs from buyers, configure your policy:
+
+```typescript
+import { createDefaultPolicy } from "@pact/sdk";
+
+const policy = createDefaultPolicy();
+policy.base.kya.zk_kya = {
+  required: true,                        // Require ZK-KYA proof from buyers
+  min_tier: "trusted",                   // Minimum trust tier (untrusted, low, trusted)
+  require_issuer: true,                  // Require issuer_id to be present
+  allowed_issuers: [                    // Whitelist of trusted issuers
+    "issuer_pact_registry",
+    "issuer_kyc_provider_v1"
+  ]
+};
+```
+
+### How It Works
+
+1. **Buyer provides proof**: Buyers include a `zk_kya_proof` in their `acquire()` input
+2. **Pact verifies**: Pact checks expiry, issuer allow-list, and minimum tier
+3. **Verification result**: The proof is verified (by default, returns `ZK_KYA_NOT_IMPLEMENTED` unless external verifier is used)
+4. **Transcript recording**: Only hashes are stored in transcripts (never raw proof data)
+
+### Important Notes
+
+- **Default verifier**: Pact's default verifier returns `ZK_KYA_NOT_IMPLEMENTED` (for deterministic CI). Real ZK verification must be implemented externally.
+- **Transcript policy**: Pact automatically hashes proofs before storing in transcripts (no raw data)
+- **Issuer allow-listing**: Use `allowed_issuers` to restrict which credential issuers you trust
+- **Tier enforcement**: Set `min_tier` to enforce minimum trust requirements
+
+### Failure Codes
+
+If a buyer's ZK-KYA proof fails validation, `acquire()` returns:
+
+- `ZK_KYA_REQUIRED`: Policy requires ZK-KYA but buyer didn't provide proof
+- `ZK_KYA_NOT_IMPLEMENTED`: Default verifier (no external ZK implementation)
+- `ZK_KYA_INVALID`: Proof verification failed
+- `ZK_KYA_EXPIRED`: Proof has expired
+- `ZK_KYA_TIER_TOO_LOW`: Trust tier below required minimum
+- `ZK_KYA_ISSUER_NOT_ALLOWED`: Issuer not in allowed list
+
+See [ZK-KYA Documentation](./ZK_KYA.md) for detailed information about proof structure, hashing rules, and security considerations.
+
 ## Troubleshooting
 
 ### Signer Mismatch

@@ -62,6 +62,83 @@ If no providers meet the requirements:
 - `CREDENTIAL_MISSING`: Provider doesn't have required credentials
 - `CREDENTIAL_EXPIRED`: Provider's credential has expired
 
+## ZK-KYA Identity Verification (v2 Phase 5)
+
+Buyers can provide zero-knowledge proof-based identity verification (ZK-KYA) to prove their identity and credentials without revealing sensitive information.
+
+### Enabling ZK-KYA in Policy
+
+To require ZK-KYA proofs, configure your policy:
+
+```typescript
+import { createDefaultPolicy } from "@pact/sdk";
+
+const policy = createDefaultPolicy();
+policy.base.kya.zk_kya = {
+  required: true,                        // Require ZK-KYA proof
+  min_tier: "trusted",                    // Minimum trust tier (untrusted, low, trusted)
+  require_issuer: true,                   // Require issuer_id to be present
+  allowed_issuers: [                     // Whitelist of trusted issuers
+    "issuer_pact_registry",
+    "issuer_kyc_provider_v1"
+  ]
+};
+```
+
+### Providing ZK-KYA Proof
+
+When ZK-KYA is required, provide the proof in `acquire()` input:
+
+```typescript
+const result = await acquire({
+  input: {
+    intentType: "weather.data",
+    scope: "NYC",
+    constraints: { latency_ms: 50, freshness_sec: 10 },
+    maxPrice: 0.0001,
+    identity: {
+      buyer: {
+        zk_kya_proof: {
+          scheme: "groth16",              // Proof scheme (groth16, plonk, halo2, unknown)
+          circuit_id: "kyc_v1",           // Circuit identifier
+          issuer_id: "issuer_pact_registry", // Issuer identifier (if required)
+          public_inputs: {                // Public inputs (will be hashed)
+            age: 25,
+            verified: true,
+            region: "US"
+          },
+          proof_bytes_b64: "...",         // Base64-encoded proof bytes (will be hashed)
+          issued_at_ms: 1704067200000,    // Issuance timestamp
+          expires_at_ms: 1704153600000,   // Expiration timestamp
+          meta: {                         // Optional metadata
+            version: "1.0"
+          }
+        }
+      }
+    }
+  },
+  // ... other acquire() parameters ...
+});
+```
+
+### Important Notes
+
+- **Raw data is never stored**: Pact automatically hashes `public_inputs` and `proof_bytes_b64` before storing in transcripts
+- **Expiry is enforced**: If `expires_at_ms` is provided and has passed, `acquire()` returns `ZK_KYA_EXPIRED`
+- **Issuer validation**: If `require_issuer: true` and `allowed_issuers` is set, the `issuer_id` must be in the allowed list
+- **Default verifier**: Pact's default verifier returns `ZK_KYA_NOT_IMPLEMENTED` (for deterministic CI). Real ZK verification must be implemented externally.
+
+### Failure Codes
+
+- `ZK_KYA_REQUIRED`: Policy requires ZK-KYA but no proof provided
+- `ZK_KYA_NOT_IMPLEMENTED`: Default verifier (no external ZK implementation)
+- `ZK_KYA_INVALID`: Proof verification failed
+- `ZK_KYA_EXPIRED`: Proof has expired
+- `ZK_KYA_TIER_TOO_LOW`: Trust tier below required minimum
+- `ZK_KYA_ISSUER_NOT_ALLOWED`: Issuer not in allowed list
+
+See [ZK-KYA Documentation](./ZK_KYA.md) for detailed information about proof structure, hashing rules, and security considerations.
+
 ## Settlement Providers
 
 Buyers must provide a settlement provider. PACT supports three types:

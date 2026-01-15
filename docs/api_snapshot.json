@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-01-14T18:44:34.231Z",
+  "generated_at": "2026-01-15T18:57:48.104Z",
   "exports": {
     "values": [
       "* from ./adapters/http/index",
@@ -14,6 +14,7 @@
       "* from ./exchange/reveal",
       "* from ./exchange/streaming",
       "* from ./kya/index",
+      "* from ./kya/zk/index",
       "* from ./negotiation/index",
       "* from ./policy/compiler",
       "* from ./policy/context",
@@ -25,6 +26,7 @@
       "* from ./protocol/index",
       "* from ./reconcile/index",
       "* from ./router/index",
+      "* from ./security/index",
       "* from ./settlement/external",
       "* from ./settlement/factory",
       "* from ./settlement/mock",
@@ -50,7 +52,8 @@
       "PriceStats",
       "ReplayFailure",
       "ReplayOptions",
-      "ReplayResult"
+      "ReplayResult",
+      "ZkKyaVerifier"
     ]
   },
   "source": "packages/sdk/src/index.ts"

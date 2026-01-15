@@ -20,9 +20,25 @@ export interface DisputeConstraints {
   max_refund_pct: number;
 }
 
+export interface ZkKyaConfig {
+  /** Whether ZK-KYA proof is required */
+  required?: boolean;
+  
+  /** Minimum trust tier required */
+  min_tier?: "untrusted" | "low" | "trusted";
+  
+  /** Whether issuer ID is required */
+  require_issuer?: boolean;
+  
+  /** Allowed issuer IDs (if require_issuer is true) */
+  allowed_issuers?: string[];
+}
+
 export interface BaseConstraints {
   kya: {
     trust: KyaTrustConfig;
+    /** ZK-KYA configuration (v2 Phase 5) */
+    zk_kya?: ZkKyaConfig;
   };
   disputes?: DisputeConstraints;
 }
@@ -329,7 +345,13 @@ export type FailureCode =
   | "INVALID_POLICY"
   | "FAILED_POLICY"
   | "FAILED_PROOF"
-  | "FAILED_IDENTITY";
+  | "FAILED_IDENTITY"
+  | "ZK_KYA_REQUIRED" // v2 Phase 5: ZK-KYA proof required but not provided
+  | "ZK_KYA_NOT_IMPLEMENTED" // v2 Phase 5: ZK-KYA verifier not implemented
+  | "ZK_KYA_INVALID" // v2 Phase 5: ZK-KYA proof verification failed
+  | "ZK_KYA_EXPIRED" // v2 Phase 5: ZK-KYA proof expired
+  | "ZK_KYA_TIER_TOO_LOW" // v2 Phase 5: ZK-KYA trust tier below minimum
+  | "ZK_KYA_ISSUER_NOT_ALLOWED"; // v2 Phase 5: ZK-KYA issuer not in allowed list
 
 export interface ValidationResult {
   ok: true;

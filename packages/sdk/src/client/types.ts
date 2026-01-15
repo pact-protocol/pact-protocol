@@ -69,6 +69,17 @@ export type AcquireInput = {
       uses_session_key?: boolean;
       session_intent?: string;
       session_spend_cap_ok?: boolean;
+      // v2 Phase 5: ZK-KYA proof (raw proof bytes will be hashed, not stored in transcripts)
+      zk_kya_proof?: {
+        scheme: "groth16" | "plonk" | "halo2" | "unknown";
+        circuit_id: string;
+        issuer_id?: string;
+        public_inputs?: Record<string, unknown>; // Will be canonicalized and hashed
+        proof_bytes_b64?: string; // Will be hashed, never stored in transcripts
+        issued_at_ms?: number;
+        expires_at_ms?: number;
+        meta?: Record<string, unknown>;
+      };
     };
     seller?: {
       credentials?: string[];

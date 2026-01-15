@@ -42,6 +42,12 @@ const failureCodeSchema = z.enum([
   "FRESHNESS_BREACH",
   "TRANSCRIPT_STORAGE_FORBIDDEN",
   "INVALID_POLICY",
+  "ZK_KYA_REQUIRED", // v2 Phase 5: ZK-KYA proof required but not provided
+  "ZK_KYA_NOT_IMPLEMENTED", // v2 Phase 5: ZK-KYA verifier not implemented
+  "ZK_KYA_INVALID", // v2 Phase 5: ZK-KYA proof verification failed
+  "ZK_KYA_EXPIRED", // v2 Phase 5: ZK-KYA proof expired
+  "ZK_KYA_TIER_TOO_LOW", // v2 Phase 5: ZK-KYA trust tier below minimum
+  "ZK_KYA_ISSUER_NOT_ALLOWED", // v2 Phase 5: ZK-KYA issuer not in allowed list
 ]);
 
 export const intentSchema = z

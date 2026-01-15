@@ -73,6 +73,23 @@
                   },
                   "min_trust_score": { "type": "number", "minimum": 0, "maximum": 1 }
                 }
+              },
+              "zk_kya": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "required": { "type": "boolean" },
+                  "min_tier": {
+                    "type": "string",
+                    "enum": ["untrusted", "low", "trusted"]
+                  },
+                  "require_issuer": { "type": "boolean" },
+                  "allowed_issuers": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": { "type": "string", "minLength": 1 }
+                  }
+                }
               }
             }
           },

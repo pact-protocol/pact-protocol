@@ -141,6 +141,24 @@ export type TranscriptV1 = {
     strategy_id?: string; // Strategy used for this round (v2.3.1+)
   }>;
   
+  // ZK-KYA verification (v2 Phase 5)
+  zk_kya?: {
+    scheme: string; // Proof scheme (e.g., "groth16", "plonk", "halo2")
+    circuit_id: string; // Circuit identifier
+    issuer_id?: string; // Issuer identifier (if provided)
+    public_inputs_hash: string; // SHA-256 hash of canonicalized public inputs (never store raw public_inputs)
+    proof_hash: string; // SHA-256 hash of proof bytes (never store raw proof_bytes)
+    issued_at_ms?: number; // Issuance timestamp
+    expires_at_ms?: number; // Expiration timestamp
+    verification: {
+      ok: boolean; // Whether verification succeeded
+      tier?: "untrusted" | "low" | "trusted"; // Trust tier assigned
+      trust_score?: number; // Trust score (0.0 to 1.0)
+      reason?: string; // Failure reason if ok is false
+    };
+    meta?: Record<string, unknown>; // Non-sensitive metadata
+  };
+  
   // Wallet connection (v2.3+)
   wallet?: {
     kind: string; // Wallet kind/provider (e.g., "external", "ethers", "test", "metamask", "coinbase_wallet")

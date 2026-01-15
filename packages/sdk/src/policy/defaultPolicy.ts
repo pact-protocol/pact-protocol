@@ -32,6 +32,10 @@ export function createDefaultPolicy(nowMs?: number): PactPolicy {
           min_trust_tier: "untrusted",
           min_trust_score: 0.0,
         },
+        // v2 Phase 5: ZK-KYA disabled by default (backwards compatible)
+        zk_kya: {
+          required: false,
+        },
       },
     },
     time: {
