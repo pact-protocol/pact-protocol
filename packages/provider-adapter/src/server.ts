@@ -177,7 +177,9 @@ if (process.argv[1]?.includes("server.ts")) {
     alias: { p: "port" },
   });
 
-  const port = typeof args.port === "number" ? args.port : (args.port ? parseInt(String(args.port), 10) : 7777);
+  // Default to random port (0) to avoid port conflicts
+  // Use --port or -p flag to specify a specific port
+  const port = typeof args.port === "number" ? args.port : (args.port ? parseInt(String(args.port), 10) : 0);
   
   // Load keypair using precedence: env secret > keypair file > dev seed (opt-in) > ephemeral
   const { keypair, sellerId, mode, warning } = await loadProviderKeypair();

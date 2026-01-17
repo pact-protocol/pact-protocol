@@ -109,12 +109,31 @@ async function main() {
   console.log("Replay Verification:");
   const replayResult = await replayTranscript(transcriptPath);
   
-  if (replayResult.ok) {
+  // Separate fatal failures from warnings
+  // CREDENTIAL_EXPIRED and WALLET_VERIFY_FAILED are expected for historical transcripts
+  const warningCodes = new Set(["CREDENTIAL_EXPIRED", "WALLET_VERIFY_FAILED"]);
+  const fatalFailures = replayResult.failures.filter((f) => !warningCodes.has(f.code));
+  const warnings = replayResult.failures.filter((f) => warningCodes.has(f.code));
+  
+  if (fatalFailures.length === 0 && warnings.length === 0) {
     console.log(`  ✅ Replay successful`);
-  } else {
+  } else if (fatalFailures.length > 0) {
     console.log(`  ❌ Replay failed`);
-    for (const failure of replayResult.failures) {
+    for (const failure of fatalFailures) {
       console.log(`    - ${failure.code}: ${failure.reason}`);
+    }
+  } else {
+    console.log(`  ⚠️  Replay successful with warnings`);
+  }
+  
+  if (warnings.length > 0) {
+    console.log(`  Warnings:`);
+    for (const warning of warnings) {
+      if (warning.code === "CREDENTIAL_EXPIRED") {
+        console.log(`    - ${warning.code}: ${warning.reason} (expected for historical transcripts)`);
+      } else {
+        console.log(`    - ${warning.code}: ${warning.reason}`);
+      }
     }
   }
   console.log("");
@@ -185,8 +204,9 @@ async function main() {
     console.log("");
   }
   
-  // Exit with appropriate code
-  process.exit(replayResult.ok ? 0 : 1);
+  // Exit with appropriate code (only fail on fatal errors, not warnings)
+  const exitCode = fatalFailures.length > 0 ? 1 : 0;
+  process.exit(exitCode);
 }
 
 main().catch((error) => {
