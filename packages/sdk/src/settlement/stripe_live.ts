@@ -462,7 +462,18 @@ export class StripeSettlementProvider implements SettlementProvider {
   }
   
   async commit(handle_id: string): Promise<SettlementResult> {
-    this.ensureStripeAvailable();
+    try {
+      this.ensureStripeAvailable();
+    } catch (error: any) {
+      return {
+        ok: false,
+        status: "failed",
+        paid_amount: 0,
+        failure_code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+        failure_reason: error.message,
+        handle_id,
+      };
+    }
     
     const handle = this.handles.get(handle_id);
     if (!handle) {
@@ -526,7 +537,18 @@ export class StripeSettlementProvider implements SettlementProvider {
   }
   
   async poll(handle_id: string): Promise<SettlementResult> {
-    this.ensureStripeAvailable();
+    try {
+      this.ensureStripeAvailable();
+    } catch (error: any) {
+      return {
+        ok: false,
+        status: "failed",
+        paid_amount: 0,
+        failure_code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+        failure_reason: error.message,
+        handle_id,
+      };
+    }
     
     const handle = this.handles.get(handle_id);
     if (!handle) {
@@ -550,7 +572,16 @@ export class StripeSettlementProvider implements SettlementProvider {
     reason?: string;
     idempotency_key?: string;
   }): Promise<{ ok: boolean; refunded_amount: number; code?: string; reason?: string }> {
-    this.ensureStripeAvailable();
+    try {
+      this.ensureStripeAvailable();
+    } catch (error: any) {
+      return {
+        ok: false,
+        refunded_amount: 0,
+        code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+        reason: error.message,
+      };
+    }
     
     if (refund.amount <= 0) {
       return {

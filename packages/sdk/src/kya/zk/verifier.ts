@@ -57,13 +57,13 @@ export class DefaultZkKyaVerifier implements ZkKyaVerifier {
     proof: ZkKyaProof;
     now_ms: number;
   }): Promise<ZkKyaVerificationResult> {
-    const { proof, scheme, circuit_id } = input.proof;
+    const { scheme, circuit_id, expires_at_ms } = input.proof;
     
     // Check expiration first (doesn't require snarkjs)
-    if (proof.expires_at_ms && input.now_ms > proof.expires_at_ms) {
+    if (expires_at_ms && input.now_ms > expires_at_ms) {
       return {
         ok: false,
-        reason: `ZK_KYA_EXPIRED: Proof expired at ${proof.expires_at_ms}, current time is ${input.now_ms}`,
+        reason: `ZK_KYA_EXPIRED: Proof expired at ${expires_at_ms}, current time is ${input.now_ms}`,
       };
     }
     
@@ -105,16 +105,17 @@ export class DefaultZkKyaVerifier implements ZkKyaVerifier {
       //
       // For now, we verify that snarkjs is available and would perform verification.
       // Since we don't have access to raw proof bytes here (by design, for transcript safety),
-      // we return success if snarkjs is available. Full verification would require:
+      // we cannot actually verify the proof. We return "not implemented" to indicate
+      // that full verification requires raw proof data.
+      // Full verification would require:
       // - Extending ZkKyaVerifier interface to accept raw proof data separately, OR
       // - Providing a way to access raw proof data from secure storage using proof_hash
       
-      // Placeholder: Return success if snarkjs is available
-      // Real implementation would perform full snarkjs.groth16.verify() here
+      // Return "not implemented" since we don't have raw proof bytes to verify
+      // Real implementation would perform full snarkjs.groth16.verify() here with raw proof data
       return {
-        ok: true,
-        tier: "trusted", // Default tier when verification passes
-        trust_score: 0.9, // Default trust score
+        ok: false,
+        reason: "ZK_KYA_NOT_IMPLEMENTED: snarkjs is available but raw proof bytes are required for verification. Use a verifier that accepts raw proof data.",
       };
       
     } catch (error: any) {

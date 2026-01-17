@@ -14,7 +14,7 @@
   },
   "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean --tsconfig tsconfig.build.json",
+    "build": "pnpm exec tsup src/index.ts --format esm --dts --clean --tsconfig tsconfig.build.json",
     "postbuild": "cp src/policy/schema.json dist/schema.json",
     "test": "pnpm exec vitest run",
     "test:watch": "vitest",

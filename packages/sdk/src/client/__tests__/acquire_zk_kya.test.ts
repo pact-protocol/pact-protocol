@@ -33,6 +33,16 @@ describe("acquire with ZK-KYA", () => {
       required: true,
     };
     
+    // Register a provider so we get past NO_PROVIDERS check
+    const directory = new InMemoryProviderDirectory([]);
+    directory.registerProvider({
+      provider_id: sellerId,
+      intentType: baseInput.intentType,
+      pubkey_b58: sellerId,
+      credentials: [],
+      baseline_latency_ms: 25,
+    });
+    
     const result = await acquire({
       input: baseInput,
       buyerKeyPair,
@@ -42,7 +52,7 @@ describe("acquire with ZK-KYA", () => {
       sellerId,
       policy,
       settlement: new (await import("../../settlement/mock")).MockSettlementProvider(),
-      directory: new InMemoryProviderDirectory([]),
+      directory,
       now: () => 1000,
     });
     
@@ -65,6 +75,17 @@ describe("acquire with ZK-KYA", () => {
       proof_bytes_b64: Buffer.from("fake proof").toString("base64"),
     };
     
+    // Register a provider so we get past NO_PROVIDERS check
+    // Don't set endpoint to avoid HTTP calls - use sellerKeyPair directly instead
+    const directory = new InMemoryProviderDirectory([]);
+    directory.registerProvider({
+      provider_id: sellerId,
+      intentType: baseInput.intentType,
+      pubkey_b58: sellerId,
+      credentials: [],
+      baseline_latency_ms: 25,
+    });
+    
     const result = await acquire({
       input: {
         ...baseInput,
@@ -81,7 +102,7 @@ describe("acquire with ZK-KYA", () => {
       sellerId,
       policy,
       settlement: new (await import("../../settlement/mock")).MockSettlementProvider(),
-      directory: new InMemoryProviderDirectory([]),
+      directory,
       now: () => 1000,
     });
     
@@ -105,6 +126,16 @@ describe("acquire with ZK-KYA", () => {
       expires_at_ms: 500, // Expired (now is 1000)
     };
     
+    // Register a provider so we get past NO_PROVIDERS check
+    const directory = new InMemoryProviderDirectory([]);
+    directory.registerProvider({
+      provider_id: sellerId,
+      intentType: baseInput.intentType,
+      pubkey_b58: sellerId,
+      credentials: [],
+      baseline_latency_ms: 25,
+    });
+    
     const result = await acquire({
       input: {
         ...baseInput,
@@ -121,7 +152,7 @@ describe("acquire with ZK-KYA", () => {
       sellerId,
       policy,
       settlement: new (await import("../../settlement/mock")).MockSettlementProvider(),
-      directory: new InMemoryProviderDirectory([]),
+      directory,
       now: () => 1000,
     });
     
@@ -149,6 +180,17 @@ describe("acquire with ZK-KYA", () => {
     // with the default verifier. This test verifies the policy structure is correct.
     // To test tier enforcement, we would need to inject a test verifier (future enhancement).
     
+    // Register a provider so we get past NO_PROVIDERS check
+    // Don't set endpoint to avoid HTTP calls - use sellerKeyPair directly instead
+    const directory = new InMemoryProviderDirectory([]);
+    directory.registerProvider({
+      provider_id: sellerId,
+      intentType: baseInput.intentType,
+      pubkey_b58: sellerId,
+      credentials: [],
+      baseline_latency_ms: 25,
+    });
+    
     const result = await acquire({
       input: {
         ...baseInput,
@@ -165,7 +207,7 @@ describe("acquire with ZK-KYA", () => {
       sellerId,
       policy,
       settlement: new (await import("../../settlement/mock")).MockSettlementProvider(),
-      directory: new InMemoryProviderDirectory([]),
+      directory,
       now: () => 1000,
     });
     
@@ -198,6 +240,16 @@ describe("acquire with ZK-KYA", () => {
       proof_bytes_b64: Buffer.from("fake proof").toString("base64"),
     };
     
+    // Register a provider so we get past NO_PROVIDERS check
+    const directory = new InMemoryProviderDirectory([]);
+    directory.registerProvider({
+      provider_id: sellerId,
+      intentType: baseInput.intentType,
+      pubkey_b58: sellerId,
+      credentials: [],
+      baseline_latency_ms: 25,
+    });
+    
     const result = await acquire({
       input: {
         ...baseInput,
@@ -214,7 +266,7 @@ describe("acquire with ZK-KYA", () => {
       sellerId,
       policy,
       settlement: new (await import("../../settlement/mock")).MockSettlementProvider(),
-      directory: new InMemoryProviderDirectory([]),
+      directory,
       now: () => 1000,
     });
     

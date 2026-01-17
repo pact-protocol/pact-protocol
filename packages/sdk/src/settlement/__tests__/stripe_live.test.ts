@@ -241,21 +241,21 @@ describe("StripeLiveSettlementProvider", () => {
       const config = { mode: "sandbox" as const, enabled: false };
       const provider = new StripeLiveSettlementProvider(config);
       
-      expect(() => provider.lock("agent-1", 100)).toThrow("boundary only");
+      expect(() => provider.lock("agent-1", 100)).toThrow(/Stripe integration requires 'stripe' package/);
     });
     
     it("should throw on release()", () => {
       const config = { mode: "sandbox" as const, enabled: false };
       const provider = new StripeLiveSettlementProvider(config);
       
-      expect(() => provider.release("agent-1", 100)).toThrow("boundary only");
+      expect(() => provider.release("agent-1", 100)).toThrow(/Stripe integration requires 'stripe' package/);
     });
     
     it("should throw on pay()", () => {
       const config = { mode: "sandbox" as const, enabled: false };
       const provider = new StripeLiveSettlementProvider(config);
       
-      expect(() => provider.pay("from", "to", 100)).toThrow("boundary only");
+      expect(() => provider.pay("from", "to", 100)).toThrow(/Stripe integration requires 'stripe' package/);
     });
     
     it("should throw on prepare()", async () => {
@@ -270,7 +270,7 @@ describe("StripeLiveSettlementProvider", () => {
         mode: "hash_reveal",
       };
       
-      await expect(provider.prepare(intent)).rejects.toThrow("boundary only");
+      await expect(provider.prepare(intent)).rejects.toThrow(/Stripe integration requires 'stripe' package/);
     });
     
     it("should return failure on commit()", async () => {
@@ -282,14 +282,14 @@ describe("StripeLiveSettlementProvider", () => {
       expect(result.ok).toBe(false);
       expect(result.status).toBe("failed");
       expect(result.failure_code).toBe("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED");
-      expect(result.failure_reason).toContain("boundary only");
+      expect(result.failure_reason).toMatch(/Stripe integration requires 'stripe' package/);
     });
     
     it("should throw on abort()", async () => {
       const config = { mode: "sandbox" as const, enabled: false };
       const provider = new StripeLiveSettlementProvider(config);
       
-      await expect(provider.abort("handle-1")).rejects.toThrow("boundary only");
+      await expect(provider.abort("handle-1")).rejects.toThrow(/Stripe integration requires 'stripe' package/);
     });
     
     it("should return failure on poll()", async () => {
@@ -301,7 +301,7 @@ describe("StripeLiveSettlementProvider", () => {
       expect(result.ok).toBe(false);
       expect(result.status).toBe("failed");
       expect(result.failure_code).toBe("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED");
-      expect(result.failure_reason).toContain("boundary only");
+      expect(result.failure_reason).toMatch(/Stripe integration requires 'stripe' package/);
     });
     
     it("should return failure on refund()", async () => {
@@ -317,7 +317,7 @@ describe("StripeLiveSettlementProvider", () => {
       
       expect(result.ok).toBe(false);
       expect(result.code).toBe("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED");
-      expect(result.reason).toContain("boundary only");
+      expect(result.reason).toMatch(/Stripe integration requires 'stripe' package/);
     });
   });
   
@@ -329,11 +329,11 @@ describe("StripeLiveSettlementProvider", () => {
     // This test ensures no fetch/http/network code is present
     
     // All methods should throw or return failure immediately
-    expect(() => provider.lock("agent-1", 100)).toThrow("boundary only");
-    expect(() => provider.release("agent-1", 100)).toThrow("boundary only");
-    expect(() => provider.pay("from", "to", 100)).toThrow("boundary only");
-    expect(() => provider.credit("agent-1", 100)).toThrow("boundary only");
-    expect(() => provider.debit("agent-1", 100)).toThrow("boundary only");
+    expect(() => provider.lock("agent-1", 100)).toThrow(/Stripe integration requires 'stripe' package/);
+    expect(() => provider.release("agent-1", 100)).toThrow(/Stripe integration requires 'stripe' package/);
+    expect(() => provider.pay("from", "to", 100)).toThrow(/Stripe integration requires 'stripe' package/);
+    expect(() => provider.credit("agent-1", 100)).toThrow(/Stripe integration requires 'stripe' package/);
+    expect(() => provider.debit("agent-1", 100)).toThrow(/Stripe integration requires 'stripe' package/);
     
     await expect(provider.prepare({
       intent_id: "intent-1",
@@ -341,13 +341,13 @@ describe("StripeLiveSettlementProvider", () => {
       to: "seller-1",
       amount: 0.1,
       mode: "hash_reveal",
-    })).rejects.toThrow("boundary only");
+    })).rejects.toThrow(/Stripe integration requires 'stripe' package/);
     
     const commitResult = await provider.commit("handle-1");
     expect(commitResult.ok).toBe(false);
     expect(commitResult.failure_code).toBe("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED");
     
-    await expect(provider.abort("handle-1")).rejects.toThrow("boundary only");
+    await expect(provider.abort("handle-1")).rejects.toThrow(/Stripe integration requires 'stripe' package/);
     
     const pollResult = await provider.poll!("handle-1");
     expect(pollResult.ok).toBe(false);

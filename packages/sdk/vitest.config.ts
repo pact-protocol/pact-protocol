@@ -1,6 +1,13 @@
 import { defineConfig } from "vitest/config";
+import { resolve } from "node:path";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@pact/provider-adapter": resolve(__dirname, "../provider-adapter/src/index.ts"),
+      "@pact/sdk": resolve(__dirname, "src/index.ts"),
+    },
+  },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],

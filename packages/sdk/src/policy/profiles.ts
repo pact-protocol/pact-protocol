@@ -11,7 +11,7 @@
  * Each profile encodes a specific negotiation strategy that can be reused across providers.
  */
 
-import type { PactPolicy, Partial<PactPolicy> } from "./types";
+import type { PactPolicy } from "./types";
 import { createDefaultPolicy } from "./defaultPolicy";
 
 /**

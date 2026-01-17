@@ -697,6 +697,7 @@ export async function acquire(params: {
   const guard = new DefaultPolicyGuard(compiled);
   
   // v2 Phase 5: ZK-KYA verification (policy-gated)
+  // Note: compiled.base = policy (entire PactPolicy), so policy.base.kya.zk_kya -> compiled.base.base.kya.zk_kya
   const zkKyaConfig = compiled.base.base?.kya?.zk_kya;
   let zkKyaVerifier: ZkKyaVerifier | undefined = new DefaultZkKyaVerifier();
   let zkKyaVerificationResult: ZkKyaVerificationResult | undefined;
@@ -761,10 +762,15 @@ export async function acquire(params: {
     });
     
     if (!zkKyaVerificationResult.ok) {
+      // Extract error code from reason string (e.g., "ZK_KYA_NOT_IMPLEMENTED: ..." -> "ZK_KYA_NOT_IMPLEMENTED")
+      const reasonStr = zkKyaVerificationResult.reason || "ZK_KYA_INVALID";
+      const codeMatch = reasonStr.match(/^([A-Z_]+)/);
+      const code = codeMatch ? codeMatch[1] : "ZK_KYA_INVALID";
+      
       return {
         ok: false,
-        code: zkKyaVerificationResult.reason as any || "ZK_KYA_INVALID",
-        reason: zkKyaVerificationResult.reason || "ZK-KYA proof verification failed",
+        code: code as any,
+        reason: reasonStr,
         ...(explain ? { explain } : {}),
       };
     }
