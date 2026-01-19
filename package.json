@@ -25,6 +25,7 @@
     "replay:verify": "tsx packages/sdk/src/cli/replay_verify.ts",
     "replay:verify:strict-terminal": "tsx packages/sdk/src/cli/replay_verify.ts --strict --terminal-only -- .pact/transcripts",
     "replay:verify:strict-reconciled": "tsx packages/sdk/src/cli/replay_verify.ts --strict --reconciled-only -- .pact/transcripts",
+    "replay:verify:recent": "tsx packages/sdk/src/cli/replay_verify.ts --no-historical -- .pact/transcripts",
     "replay:last": "tsx packages/sdk/src/cli/replay.ts $(ls -t .pact/transcripts/intent-*.json 2>/dev/null | head -n 1)",
     "replay:v4": "tsx packages/sdk/src/cli/replay_v4.ts",
     "evidence:bundle": "tsx packages/sdk/src/cli/evidence_bundle.ts",

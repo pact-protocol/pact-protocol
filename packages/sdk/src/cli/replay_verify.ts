@@ -64,10 +64,51 @@ function findJsonFiles(dir: string): string[] {
   return files;
 }
 
+/**
+ * Check if a transcript is "historical" (likely to have expired credentials).
+ * A transcript is considered historical if:
+ * - It's older than the specified days threshold, OR
+ * - It's a v1/v2 transcript (not v4)
+ */
+function isHistoricalTranscript(file: string, transcript: any, historicalDays: number): boolean {
+  // Check transcript version - v1/v2 transcripts are historical
+  const version = transcript?.transcript_version || transcript?.version;
+  if (version && typeof version === "string") {
+    if (version.startsWith("1.") || version === "pact-transcript/1.0" || version === "pact-transcript/2.0") {
+      return true;
+    }
+  }
+  
+  // Check age - transcripts older than the threshold are historical
+  const createdAt = transcript?.created_at_ms || transcript?.timestamp_ms;
+  if (createdAt && typeof createdAt === "number") {
+    const ageMs = Date.now() - createdAt;
+    const ageDays = ageMs / (1000 * 60 * 60 * 24);
+    if (ageDays > historicalDays) {
+      return true;
+    }
+  }
+  
+  // Fallback: check file modification time if transcript metadata is missing
+  try {
+    const stats = fs.statSync(file);
+    const ageMs = Date.now() - stats.mtimeMs;
+    const ageDays = ageMs / (1000 * 60 * 60 * 24);
+    if (ageDays > historicalDays) {
+      return true;
+    }
+  } catch {
+    // If we can't check file stats, don't filter it
+  }
+  
+  return false;
+}
+
 async function main() {
   const raw = process.argv.slice(2).filter((x) => x !== "--");
   const args = minimist(raw, {
-    boolean: ["strict", "terminal-only", "reconciled-only"],
+    boolean: ["strict", "terminal-only", "reconciled-only", "no-historical"],
+    string: ["historical-days"],
   });
   
   // Get positional arguments (paths to verify)
@@ -75,9 +116,22 @@ async function main() {
   const strict = args.strict || false;
   const terminalOnly = args["terminal-only"] || false;
   const reconciledOnly = args["reconciled-only"] || false;
+  const noHistorical = args["no-historical"] || false;
+  const historicalDaysStr = args["historical-days"];
+  
+  // Parse historical-days (default: 30)
+  let historicalDays = 30;
+  if (historicalDaysStr) {
+    const parsed = parseInt(historicalDaysStr, 10);
+    if (isNaN(parsed) || parsed < 0) {
+      console.error(`Error: --historical-days must be a non-negative number, got: ${historicalDaysStr}`);
+      process.exit(1);
+    }
+    historicalDays = parsed;
+  }
   
   if (paths.length === 0) {
-    console.error("Usage: pnpm replay:verify -- <path> [--strict] [--terminal-only] [--reconciled-only]");
+    console.error("Usage: pnpm replay:verify -- <path> [--strict] [--terminal-only] [--reconciled-only] [--no-historical] [--historical-days <days>]");
     console.error("");
     console.error("Arguments:");
     console.error("  <path>                    File or directory containing transcript JSON files");
@@ -86,12 +140,16 @@ async function main() {
     console.error("  --strict                  Treat pending settlements without resolution as errors (default: warnings)");
     console.error("  --terminal-only           When used with --strict, skip pending transcripts with a warning");
     console.error("  --reconciled-only         Only verify reconciled transcripts (*-reconciled-*.json) and terminal transcripts");
+    console.error("  --no-historical           Skip historical transcripts (v1/v2 or older than threshold) to avoid expired credential warnings");
+    console.error("  --historical-days <days>  Days threshold for considering transcripts historical (default: 30)");
     console.error("");
     console.error("Examples:");
     console.error("  pnpm replay:verify -- .pact/transcripts");
     console.error("  pnpm replay:verify -- transcript.json");
     console.error("  pnpm replay:verify -- .pact/transcripts --strict");
     console.error("  pnpm replay:verify -- .pact/transcripts --strict --terminal-only");
+    console.error("  pnpm replay:verify -- .pact/transcripts --no-historical");
+    console.error("  pnpm replay:verify -- .pact/transcripts --no-historical --historical-days 7");
     process.exit(1);
   }
   
@@ -128,6 +186,40 @@ async function main() {
     console.error(`Error: No .json files found in: ${inputPath}`);
     console.error(`Hint: Ensure the directory contains transcript JSON files.`);
     process.exit(1);
+  }
+
+  // Optional filtering: exclude historical transcripts (v1/v2 or older than threshold)
+  // This avoids noisy "credential expired" warnings for old transcripts.
+  if (noHistorical) {
+    const filtered: string[] = [];
+    let excluded = 0;
+
+    for (const file of files) {
+      try {
+        const content = fs.readFileSync(file, "utf-8");
+        const transcript = JSON.parse(content);
+        if (isHistoricalTranscript(file, transcript, historicalDays)) {
+          excluded++;
+        } else {
+          filtered.push(file);
+        }
+      } catch {
+        // If unreadable/unparseable, keep it so verification reports a real error.
+        filtered.push(file);
+      }
+    }
+
+    files = filtered;
+    if (files.length === 0) {
+      console.error(`Error: No non-historical transcripts found in: ${inputPath}`);
+      console.error(`Hint: All transcripts appear to be historical (v1/v2 or older than ${historicalDays} days).`);
+      console.error(`Hint: Use without --no-historical to verify all transcripts, or adjust --historical-days threshold.`);
+      process.exit(1);
+    }
+
+    if (excluded > 0) {
+      console.log(`ℹ️  Filtered out ${excluded} historical transcript(s) due to --no-historical (v1/v2 or older than ${historicalDays} days)`);
+    }
   }
 
   // Optional filtering: only verify reconciled transcripts and terminal transcripts.

@@ -10,15 +10,108 @@
  * Run: pnpm demo:v4:canonical
  */
 
-import { runInPactBoundary, type BoundaryIntent, type PactPolicyV4 } from "@pact/sdk";
-import { replayTranscriptV4 } from "@pact/sdk";
+import { 
+  runInPactBoundary, 
+  type BoundaryIntent, 
+  type PactPolicyV4,
+  replayTranscriptV4, 
+  addRoundToTranscript,
+  stableCanonicalize,
+  hashMessage,
+} from "@pact/sdk";
 import * as path from "node:path";
 import * as fs from "node:fs";
+import * as crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
+import bs58 from "bs58";
+import type { TranscriptV4, TranscriptRound, Signature } from "@pact/sdk";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../..");
+
+/**
+ * Ed25519 keypair with Node.js crypto KeyObjects for signing.
+ */
+interface KeyPairWithObjects {
+  publicKey: Uint8Array;
+  secretKey: Uint8Array;
+  publicKeyObj: crypto.KeyObject;
+  privateKeyObj: crypto.KeyObject;
+}
+
+/**
+ * Generate Ed25519 keypair using Node.js crypto (no external deps needed).
+ * Returns keypair in tweetnacl-compatible format for signature verification.
+ */
+function generateKeyPair(): KeyPairWithObjects {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
+  
+  // Export keys in JWK format to get raw bytes
+  const publicKeyJwk = publicKey.export({ format: "jwk" }) as { x: string };
+  const privateKeyJwk = privateKey.export({ format: "jwk" }) as { d: string; x: string };
+  
+  // JWK 'x' is base64url-encoded public key (32 bytes), 'd' is base64url-encoded private key (32 bytes)
+  const publicKeyBytes = Buffer.from(publicKeyJwk.x, "base64url");
+  const privateKeyBytes = Buffer.from(privateKeyJwk.d, "base64url");
+  
+  // tweetnacl format: secretKey is 64 bytes (32 private + 32 public)
+  return {
+    publicKey: new Uint8Array(publicKeyBytes),
+    secretKey: new Uint8Array(Buffer.concat([privateKeyBytes, publicKeyBytes])),
+    publicKeyObj: publicKey,
+    privateKeyObj: privateKey,
+  };
+}
+
+/**
+ * Create a signed round for transcript.
+ * Matches fixture generator structure: envelope contains type + intent_id + round-specific fields.
+ */
+function createSignedRound(
+  roundType: "INTENT" | "ASK" | "BID" | "COUNTER" | "ACCEPT" | "REJECT" | "ABORT",
+  agentId: string,
+  keypair: ReturnType<typeof generateKeyPair>,
+  timestampMs: number,
+  intentId: string,
+  contentSummary?: Record<string, unknown>
+): Omit<TranscriptRound, "round_number" | "previous_round_hash" | "round_hash"> {
+  // Create envelope object matching fixture generator structure
+  // Envelope contains: type, intent_id, and round-specific fields (price, etc.)
+  const envelope: Record<string, unknown> = {
+    type: roundType,
+    intent_id: intentId,
+    ...contentSummary,
+  };
+
+  // Hash the envelope using stableCanonicalize + sha256 (matches fixture generator)
+  const envelopeCanonical = stableCanonicalize(envelope);
+  const envelopeHash = crypto.createHash("sha256").update(envelopeCanonical, "utf8").digest("hex");
+  
+  // Sign the envelope hash using Node.js crypto Ed25519
+  const hashBytes = Buffer.from(envelopeHash, "hex");
+  const sigBytes = crypto.sign(null, hashBytes, keypair.privateKeyObj);
+  const signatureB58 = bs58.encode(sigBytes);
+  const publicKeyB58 = bs58.encode(Buffer.from(keypair.publicKey));
+
+  const signature: Signature = {
+    signer_public_key_b58: publicKeyB58,
+    signature_b58: signatureB58,
+    signed_at_ms: timestampMs,
+    scheme: "ed25519",
+  };
+
+  return {
+    round_type: roundType,
+    message_hash: envelopeHash, // Same as envelope_hash (matches fixtures)
+    envelope_hash: envelopeHash,
+    signature,
+    timestamp_ms: timestampMs,
+    agent_id: agentId,
+    public_key_b58: publicKeyB58,
+    content_summary: contentSummary || {},
+  };
+}
 
 async function main() {
   console.log("═══════════════════════════════════════════════════════════");
@@ -92,6 +185,63 @@ async function main() {
     };
   });
 
+  // Add signed rounds to transcript (INTENT, ASK, ACCEPT)
+  let transcript = result.transcript;
+  
+  // Generate keypairs for buyer and seller
+  const buyerKeypair = generateKeyPair();
+  const sellerKeypair = generateKeyPair();
+  
+  // Helper to compute initial hash for round 0 (matches replay.ts logic)
+  const computeInitialHash = (intentId: string, createdAtMs: number): string => {
+    const combined = `${intentId}:${createdAtMs}`;
+    return crypto.createHash("sha256").update(combined, "utf8").digest("hex");
+  };
+  
+  // Helper to compute round hash (matches transcript.ts logic - excludes round_hash field)
+  const computeRoundHash = (round: Omit<TranscriptRound, "round_hash">): string => {
+    const canonical = stableCanonicalize(round);
+    return crypto.createHash("sha256").update(canonical, "utf8").digest("hex");
+  };
+  
+  const baseTimestamp = intent.created_at_ms;
+  const initialHash = computeInitialHash(intent.intent_id, intent.created_at_ms);
+  
+  // Add INTENT round (round 0) - use addRoundToTranscript but fix previous_round_hash after
+  const intentRoundRaw = createSignedRound("INTENT", "buyer", buyerKeypair, baseTimestamp, intent.intent_id, {
+    intent_type: intent.intent_type,
+  });
+  
+  // Create round 0 manually with correct previous_round_hash, then compute round_hash
+  const intentRoundWithoutHash: Omit<TranscriptRound, "round_hash"> = {
+    ...intentRoundRaw,
+    round_number: 0,
+    previous_round_hash: initialHash,
+  };
+  const intentRoundHash = computeRoundHash(intentRoundWithoutHash);
+  const intentRound: TranscriptRound = {
+    ...intentRoundWithoutHash,
+    round_hash: intentRoundHash,
+  };
+  
+  // Add round 0 to transcript
+  transcript = {
+    ...transcript,
+    rounds: [intentRound],
+  };
+  
+  // Add ASK round (round 1) - addRoundToTranscript will use round 0's round_hash
+  const askRoundRaw = createSignedRound("ASK", "seller", sellerKeypair, baseTimestamp + 1000, intent.intent_id, {
+    price: 0.04,
+  });
+  transcript = addRoundToTranscript(transcript, askRoundRaw);
+  
+  // Add ACCEPT round (round 2) - addRoundToTranscript will use round 1's round_hash
+  const acceptRoundRaw = createSignedRound("ACCEPT", "buyer", buyerKeypair, baseTimestamp + 2000, intent.intent_id, {
+    price: 0.04,
+  });
+  transcript = addRoundToTranscript(transcript, acceptRoundRaw);
+
   // Print results
   console.log("═══════════════════════════════════════════════════════════");
   if (result.success) {
@@ -101,18 +251,19 @@ async function main() {
     console.log(`     Outcome: ✅ Success`);
     console.log(`     Agreed Price: $0.04`);
     console.log(`     Policy Hash: ${result.policy_hash.substring(0, 16)}...`);
-    console.log(`     Transcript ID: ${result.transcript.transcript_id}`);
+    console.log(`     Transcript ID: ${transcript.transcript_id}`);
+    console.log(`     Rounds: ${transcript.rounds.length}`);
     console.log(`     Evidence Refs: ${result.evidence_refs.length}\n`);
 
     // Save transcript
-    const transcriptPath = path.join(transcriptDir, `${result.transcript.transcript_id}.json`);
-    fs.writeFileSync(transcriptPath, JSON.stringify(result.transcript, null, 2));
+    const transcriptPath = path.join(transcriptDir, `${transcript.transcript_id}.json`);
+    fs.writeFileSync(transcriptPath, JSON.stringify(transcript, null, 2));
     console.log("  📄 Transcript:");
     console.log(`     Path: ${transcriptPath}\n`);
 
     // Replay transcript to verify
     console.log("  🔍 Verifying Transcript...");
-    const replayResult = await replayTranscriptV4(result.transcript);
+    const replayResult = await replayTranscriptV4(transcript);
     if (replayResult.ok && replayResult.integrity_status === "VALID") {
       console.log("     ✓ Integrity: VALID");
       console.log(`     ✓ Signatures verified: ${replayResult.signature_verifications}`);

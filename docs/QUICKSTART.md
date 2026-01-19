@@ -116,6 +116,16 @@ Verify transcript integrity (strict mode skips pending and treats expired creden
 
 ```bash
 pnpm replay:verify --strict --terminal-only -- .pact/transcripts
+
+To skip historical transcripts (v1/v2 or older than threshold) and avoid expired credential warnings:
+
+```bash
+pnpm replay:verify:recent
+# or
+pnpm replay:verify --no-historical -- .pact/transcripts
+# Custom threshold (default: 30 days)
+pnpm replay:verify --no-historical --historical-days 7 -- .pact/transcripts
+```
 ```
 
 **Note**: Expired credentials and wallet verification failures are treated as warnings (expected for historical transcripts), not errors.
