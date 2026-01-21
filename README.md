@@ -186,7 +186,10 @@ See [versions/v4/STATUS.md](./docs/versions/v4/STATUS.md) for complete feature l
 # Clone and install
 git clone https://github.com/seankkoons-gif/pact_.git
 cd pact
-pnpm install
+pnpm install:clean
+
+# Verify toolchain
+pnpm doctor:toolchain
 
 # Run the v4 canonical demo
 pnpm demo:v4:canonical
@@ -199,6 +202,24 @@ pnpm evidence:bundle .pact/transcripts/transcript-*.json --out ./evidence-bundle
 ```
 
 See [getting-started/QUICKSTART.md](./docs/getting-started/QUICKSTART.md) for a complete walkthrough.
+
+### Tooling & Recovery
+
+**Normal workflow:**
+```bash
+pnpm install:clean
+pnpm doctor:toolchain
+pnpm release:gate
+```
+
+**If anything breaks:**
+```bash
+pnpm reset:deps
+pnpm doctor:toolchain
+pnpm release:gate
+```
+
+**Note:** Do not alternate between `pnpm install` and `pnpm install --ignore-scripts` unless debugging; prefer `reset:deps` for a clean recovery.
 
 ### Verify Transcripts
 
@@ -547,6 +568,8 @@ This creates/updates `providers.jsonl` in the repo root.
 ```bash
 pnpm demo:happy
 ```
+
+This runs the **v4 provider-backed demo** (produces `pact-transcript/4.0` transcripts). For v1 transcripts, use `pnpm demo:v1:happy` instead.
 
 This runs the demo with:
 - Registry: `./providers.jsonl` (relative to repo root)
