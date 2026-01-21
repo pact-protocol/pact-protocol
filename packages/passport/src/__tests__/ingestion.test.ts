@@ -163,7 +163,7 @@ describe("Passport Ingestion", () => {
     });
 
     it("should ingest PACT-404-settlement-timeout.json but NOT record events (non_terminal)", () => {
-      const transcript = loadFixture("failures/PACT-404-settlement-timeout.json");
+      const transcript = loadFixture("compromised/PACT-404-settlement-timeout-finalhash-mismatch.json");
       const result = ingestTranscriptOutcome(storage, transcript);
 
       // PACT-404 has terminality: "non_terminal", so it should not be ingested

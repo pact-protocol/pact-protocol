@@ -2,25 +2,56 @@
  * Passport Storage
  * 
  * SQLite-based persistent storage for Passport v4 events and scores.
+ * Falls back to MemoryPassportStorage if better-sqlite3 is not available.
  */
 
-import Database from "better-sqlite3";
 import type { PassportEvent, PassportScore } from "./types";
+import { MemoryPassportStorage } from "./storage-memory";
 
 export class PassportStorage {
-  private db: Database.Database;
+  private db: any | null = null;
+  private memoryStorage: MemoryPassportStorage | null = null;
+  private useMemory: boolean;
 
-  constructor(dbPath: string) {
-    this.db = new Database(dbPath);
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("foreign_keys = ON");
-    this.initSchema();
+  constructor(dbPath: string, Database?: any | null) {
+    if (Database) {
+      // Use SQLite if available
+      this.db = new Database(dbPath);
+      this.db.pragma("journal_mode = WAL");
+      this.db.pragma("foreign_keys = ON");
+      this.initSchema();
+      this.useMemory = false;
+    } else {
+      // Fall back to memory storage
+      this.memoryStorage = new MemoryPassportStorage(dbPath);
+      this.useMemory = true;
+    }
   }
 
   /**
-   * Initialize database schema.
+   * Create a PassportStorage instance (async factory for ESM dynamic import).
+   * Falls back to MemoryPassportStorage if better-sqlite3 is not available.
+   */
+  static async create(dbPath: string): Promise<PassportStorage> {
+    // Try to load better-sqlite3 using dynamic import (ESM compatible)
+    let Database: any | null = null;
+    try {
+      // @ts-expect-error - better-sqlite3 is an optional peer dependency, not available at build time
+      const module = await import("better-sqlite3");
+      Database = module.default;
+    } catch {
+      // better-sqlite3 not available, will use MemoryPassportStorage
+      Database = null;
+    }
+
+    return new PassportStorage(dbPath, Database);
+  }
+
+  /**
+   * Initialize database schema (only for SQLite).
    */
   private initSchema(): void {
+    if (!this.db) return; // Memory storage doesn't need schema
     // Agents table
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS agents (
@@ -124,6 +155,10 @@ export class PassportStorage {
    * Upsert agent record.
    */
   upsertAgent(agentId: string, identitySnapshotHash: string, createdAt: number): void {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.upsertAgent(agentId, identitySnapshotHash, createdAt);
+    }
+    if (!this.db) throw new Error("Database not initialized");
     const stmt = this.db.prepare(`
       INSERT INTO agents (agent_id, created_at, identity_snapshot_hash)
       VALUES (?, ?, ?)
@@ -137,6 +172,10 @@ export class PassportStorage {
    * Insert passport event (idempotent on transcript_hash + agent_id).
    */
   insertEvent(event: Omit<PassportEvent, "id">): boolean {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.insertEvent(event);
+    }
+    if (!this.db) throw new Error("Database not initialized");
     const stmt = this.db.prepare(`
       INSERT INTO passport_events (
         agent_id, event_type, ts, transcript_hash, counterparty_agent_id,
@@ -170,6 +209,10 @@ export class PassportStorage {
    * Upsert passport score.
    */
   upsertScore(score: PassportScore): void {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.upsertScore(score);
+    }
+    if (!this.db) throw new Error("Database not initialized");
     const stmt = this.db.prepare(`
       INSERT INTO passport_scores (agent_id, computed_at, score, confidence, breakdown_json)
       VALUES (?, ?, ?, ?, ?)
@@ -186,6 +229,10 @@ export class PassportStorage {
    * Check if transcript_hash + agent_id combination already exists (for idempotency).
    */
   hasTranscriptHash(transcriptHash: string, agentId?: string): boolean {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.hasTranscriptHash(transcriptHash, agentId);
+    }
+    if (!this.db) throw new Error("Database not initialized");
     if (agentId) {
       const stmt = this.db.prepare(`
         SELECT 1 FROM passport_events WHERE transcript_hash = ? AND agent_id = ? LIMIT 1
@@ -206,6 +253,10 @@ export class PassportStorage {
    * Get all events for an agent (for testing/debugging).
    */
   getEventsByAgent(agentId: string): PassportEvent[] {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.getEventsByAgent(agentId);
+    }
+    if (!this.db) throw new Error("Database not initialized");
     const stmt = this.db.prepare(`
       SELECT * FROM passport_events WHERE agent_id = ? ORDER BY ts ASC
     `);
@@ -216,6 +267,10 @@ export class PassportStorage {
    * Get score for an agent (for testing/debugging).
    */
   getScore(agentId: string): PassportScore | null {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.getScore(agentId);
+    }
+    if (!this.db) throw new Error("Database not initialized");
     const stmt = this.db.prepare(`
       SELECT * FROM passport_scores WHERE agent_id = ?
     `);
@@ -227,6 +282,10 @@ export class PassportStorage {
    * Get event count by type (for testing).
    */
   getEventCounts(): { event_type: string; count: number }[] {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.getEventCounts();
+    }
+    if (!this.db) throw new Error("Database not initialized");
     const stmt = this.db.prepare(`
       SELECT event_type, COUNT(*) as count
       FROM passport_events
@@ -245,6 +304,22 @@ export class PassportStorage {
     disabledUntil?: number | null,
     reason?: string | null
   ): void {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.upsertCreditAccount(agentId, tier, updatedAt, disabledUntil, reason);
+    }
+    if (!this.db) throw new Error("Database not initialized");
+    
+    // Ensure agent exists before inserting/upserting credit account (FK constraint)
+    // Use INSERT OR IGNORE to create agent if it doesn't exist yet
+    // Use updatedAt as created_at for new agents (first time we see them)
+    // Use empty string for identity_snapshot_hash (can be updated later via upsertAgent)
+    const ensureAgentStmt = this.db.prepare(`
+      INSERT OR IGNORE INTO agents (agent_id, created_at, identity_snapshot_hash)
+      VALUES (?, ?, ?)
+    `);
+    ensureAgentStmt.run(agentId, updatedAt, "");
+    
+    // Now upsert credit account (FK constraint will be satisfied)
     const stmt = this.db.prepare(`
       INSERT INTO credit_accounts (agent_id, tier, updated_at, disabled_until, reason)
       VALUES (?, ?, ?, ?, ?)
@@ -267,6 +342,10 @@ export class PassportStorage {
     disabled_until: number | null;
     reason: string | null;
   } | null {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.getCreditAccount(agentId);
+    }
+    if (!this.db) throw new Error("Database not initialized");
     const stmt = this.db.prepare(`
       SELECT * FROM credit_accounts WHERE agent_id = ?
     `);
@@ -291,6 +370,18 @@ export class PassportStorage {
     perCounterpartyJson: string,
     updatedAt: number
   ): void {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.upsertCreditExposure(agentId, outstandingUsd, perCounterpartyJson, updatedAt);
+    }
+    if (!this.db) throw new Error("Database not initialized");
+    
+    // Ensure agent exists before inserting/upserting credit exposure (FK constraint)
+    const ensureAgentStmt = this.db.prepare(`
+      INSERT OR IGNORE INTO agents (agent_id, created_at, identity_snapshot_hash)
+      VALUES (?, ?, ?)
+    `);
+    ensureAgentStmt.run(agentId, updatedAt, "");
+    
     const stmt = this.db.prepare(`
       INSERT INTO credit_exposure (agent_id, outstanding_usd, per_counterparty_json, updated_at)
       VALUES (?, ?, ?, ?)
@@ -311,6 +402,10 @@ export class PassportStorage {
     per_counterparty_json: string;
     updated_at: number;
   } | null {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.getCreditExposure(agentId);
+    }
+    if (!this.db) throw new Error("Database not initialized");
     const stmt = this.db.prepare(`
       SELECT * FROM credit_exposure WHERE agent_id = ?
     `);
@@ -336,6 +431,18 @@ export class PassportStorage {
     counterparty_agent_id: string | null;
     reason_code: string;
   }): boolean {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.insertCreditEvent(event);
+    }
+    if (!this.db) throw new Error("Database not initialized");
+    
+    // Ensure agent exists before inserting credit event (FK constraint)
+    const ensureAgentStmt = this.db.prepare(`
+      INSERT OR IGNORE INTO agents (agent_id, created_at, identity_snapshot_hash)
+      VALUES (?, ?, ?)
+    `);
+    ensureAgentStmt.run(event.agent_id, event.ts, "");
+    
     const stmt = this.db.prepare(`
       INSERT INTO credit_events (
         agent_id, ts, transcript_hash, delta_usd, counterparty_agent_id, reason_code
@@ -369,6 +476,10 @@ export class PassportStorage {
     counterparty_agent_id: string | null;
     reason_code: string;
   }> {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.getCreditEventsByAgent(agentId);
+    }
+    if (!this.db) throw new Error("Database not initialized");
     const stmt = this.db.prepare(`
       SELECT * FROM credit_events WHERE agent_id = ? ORDER BY ts ASC
     `);
@@ -387,6 +498,10 @@ export class PassportStorage {
    * Check if credit event exists for transcript_hash (idempotency check).
    */
   hasCreditEvent(transcriptHash: string, agentId?: string): boolean {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.hasCreditEvent(transcriptHash, agentId);
+    }
+    if (!this.db) throw new Error("Database not initialized");
     if (agentId) {
       const stmt = this.db.prepare(`
         SELECT 1 FROM credit_events WHERE transcript_hash = ? AND agent_id = ? LIMIT 1
@@ -415,6 +530,10 @@ export class PassportStorage {
     ts: number;
     fault_domain: string | null;
   }> {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.getRecentFailures(agentId, windowMs, failureCodePattern);
+    }
+    if (!this.db) throw new Error("Database not initialized");
     let query = `
       SELECT transcript_hash, failure_code, ts, fault_domain
       FROM passport_events
@@ -450,6 +569,10 @@ export class PassportStorage {
     dispute_outcome: string | null;
     ts: number;
   }> {
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.getRecentDisputes(agentId, windowMs, outcome);
+    }
+    if (!this.db) throw new Error("Database not initialized");
     let query = `
       SELECT transcript_hash, dispute_outcome, ts
       FROM passport_events
@@ -476,6 +599,11 @@ export class PassportStorage {
    * Close database connection.
    */
   close(): void {
-    this.db.close();
+    if (this.useMemory && this.memoryStorage) {
+      return this.memoryStorage.close();
+    }
+    if (this.db) {
+      this.db.close();
+    }
   }
 }

@@ -5,6 +5,7 @@
  */
 
 export { PassportStorage } from "./storage";
+export { MemoryPassportStorage } from "./storage-memory";
 export { ingestTranscriptOutcome, ingestDisputeOutcome, type IngestionResult } from "./ingestion";
 export { computePassportScore, type ScoreResult, type ScoreBreakdown } from "./scoring";
 export { queryPassport, requirePassport, clearCache, type PassportQueryResponse, type PassportPolicyResult, type PassportDenialReason } from "./query";

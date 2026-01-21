@@ -16,15 +16,10 @@
   "scripts": {
     "build": "pnpm exec tsup src/index.ts --format esm --dts --clean --tsconfig tsconfig.build.json",
     "test": "pnpm exec vitest run",
-    "test:watch": "vitest",
+    "test:watch": "pnpm exec vitest",
     "lint": "eslint src --ext .ts"
   },
-  "dependencies": {
-    "better-sqlite3": "^9.2.2"
-  },
   "devDependencies": {
-    "@pact/sdk": "workspace:*",
-    "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^20.10.6",
     "tsup": "^8.5.1",
     "tsx": "^4.7.0",
