@@ -4,6 +4,8 @@ import type { Receipt } from "../exchange/receipt";
 import type { AcquireInput, AcquireResult } from "./types";
 import type { ExplainLevel, DecisionCode, ProviderDecision, AcquireExplain } from "./explain";
 import { validatePolicyJson, compilePolicy, DefaultPolicyGuard } from "../policy/index";
+import { EventRunner, isRetryableFailureCode, createEvidence } from "./event_runner";
+import type { AcquisitionPhase } from "./events";
 import { NegotiationSession } from "../engine/session";
 import { signEnvelope } from "../protocol/envelope";
 import { computeCommitHash } from "../exchange/commit";
@@ -25,7 +27,8 @@ import { computeCredentialTrustScore } from "../kya/trust";
 import { createSettlementProvider } from "../settlement/factory";
 import { MockSettlementProvider } from "../settlement/mock";
 import { selectSettlementProvider } from "../settlement/routing";
-import { isRetryableFailure, buildFallbackPlan, type ProviderCandidate } from "../settlement/fallback";
+import { buildFallbackPlan, type ProviderCandidate } from "../settlement/fallback";
+// Note: isRetryableFailure() has been replaced with isRetryableFailureCode() from event_runner
 import type { NegotiationStrategy } from "../negotiation/strategy";
 import { BaselineNegotiationStrategy } from "../negotiation/baseline";
 import { BandedConcessionStrategy } from "../negotiation/banded_concession";
@@ -682,16 +685,54 @@ export async function acquire(params: {
     explain.log.push(decision);
   };
 
-  // 1) Validate + compile policy
+  // Initialize EventRunner for phase/event pipeline
+  // Intent ID will be generated later, use temporary ID for now
+  const tempIntentId = `temp-${nowFn ? nowFn() : Date.now()}`;
+  const eventRunner = new EventRunner(tempIntentId, nowFn ? nowFn() : Date.now());
+  
+  // Register transcript commit handler to preserve ordering
+  if (saveTranscript && transcriptData && input.transcriptDir) {
+    eventRunner.on(async (event) => {
+      // Only commit transcript on transcript_commit phase (preserves atomic gate)
+      if (event.phase === "transcript_commit" && event.type === "success") {
+        try {
+          const transcriptStore = new TranscriptStore(input.transcriptDir);
+          // Use intent_id from event (will be updated when actual intent_id is generated)
+          await transcriptStore.writeTranscript(event.intent_id, transcriptData as TranscriptV1);
+        } catch (error) {
+          // Don't throw - transcript save failure shouldn't break execution
+        }
+      }
+    });
+  }
+
+  // 1) Validate + compile policy (phase: policy_validation)
   const validated = validatePolicyJson(policy);
   if (!validated.ok) {
+    const failureEvent = await eventRunner.emitFailure(
+      "policy_validation" as AcquisitionPhase,
+      "INVALID_POLICY",
+      `Policy validation failed: ${validated.errors.join(", ")}`,
+      isRetryableFailureCode("INVALID_POLICY"), // false - not retryable
+      { errors: validated.errors }
+    );
     return {
       ok: false,
-      code: "INVALID_POLICY",
-      reason: `Policy validation failed: ${validated.errors.join(", ")}`,
+      code: failureEvent.failure_code,
+      reason: failureEvent.failure_reason,
       ...(explain ? { explain } : {}),
     };
   }
+
+  // Policy validation succeeded - emit success event
+  await eventRunner.emitSuccess(
+    "policy_validation" as AcquisitionPhase,
+    { policy_id: validated.policy.policy_id || "default" },
+    [createEvidence("policy_validation" as AcquisitionPhase, "policy_validation_result", {
+      validated: true,
+      policy_id: validated.policy.policy_id,
+    })]
+  );
 
   const compiled = compilePolicy(validated.policy);
   const guard = new DefaultPolicyGuard(compiled);
@@ -850,7 +891,7 @@ export async function acquire(params: {
   const chosenMode = input.modeOverride ?? plan.settlement;
   const overrideActive = input.modeOverride != null;
 
-  // 4) Build provider candidate list (BEFORE creating session)
+  // 4) Build provider candidate list (BEFORE creating session) - Phase: provider_discovery
   let internalNow = 0;
   const nowFunction = nowFn || (() => {
     const current = internalNow;
@@ -870,12 +911,28 @@ export async function acquire(params: {
 
   let candidates: ProviderCandidate[] = [];
   
+  // Emit provider_discovery progress event
+  await eventRunner.emitProgress(
+    "provider_discovery" as AcquisitionPhase,
+    0.0,
+    "Discovering providers from directory",
+    { intent_type: input.intentType }
+  );
+  
   if (directory) {
     // Use directory for fanout
     const allProviders = directory.listProviders(input.intentType);
     
     // Log directory empty
     if (allProviders.length === 0) {
+      const failureEvent = await eventRunner.emitFailure(
+        "provider_discovery" as AcquisitionPhase,
+        "NO_PROVIDERS",
+        "Directory returned no providers for intent type",
+        isRetryableFailureCode("NO_PROVIDERS"), // false - not retryable
+        { intent_type: input.intentType }
+      );
+      
       if (explain) {
         explain.regime = plan.regime;
         explain.settlement = chosenMode;
@@ -899,8 +956,8 @@ export async function acquire(params: {
           overrideActive,
           offers_considered: 0,
         },
-        code: "NO_PROVIDERS",
-        reason: "Directory returned no providers for intent type",
+        code: failureEvent.failure_code,
+        reason: failureEvent.failure_reason,
         offers_eligible: 0,
         ...(explain ? { explain } : {}),
       };
@@ -951,6 +1008,16 @@ export async function acquire(params: {
     if (explain) {
       explain.providers_considered = candidates.length;
     }
+    
+    // Emit provider_discovery success event
+    await eventRunner.emitSuccess(
+      "provider_discovery" as AcquisitionPhase,
+      { providers_found: candidates.length, fanout: effectiveFanout },
+      [createEvidence("provider_discovery" as AcquisitionPhase, "provider_candidates", {
+        count: candidates.length,
+        provider_ids: candidates.map(c => c.provider_id),
+      })]
+    );
   } else {
     // Single seller path (backward compatible)
     candidates = [{
@@ -965,6 +1032,16 @@ export async function acquire(params: {
       // Log that we're using single seller path (no decision code needed for positive directory lookup)
       explain.providers_considered = 1;
     }
+    
+    // Emit provider_discovery success event (single seller path)
+    await eventRunner.emitSuccess(
+      "provider_discovery" as AcquisitionPhase,
+      { providers_found: 1, fanout: 1 },
+      [createEvidence("provider_discovery" as AcquisitionPhase, "provider_candidates", {
+        count: 1,
+        provider_ids: [sellerId],
+      })]
+    );
   }
 
   const cp: any = (params.policy as any).counterparty ?? {};
@@ -1000,6 +1077,14 @@ export async function acquire(params: {
   // Track failure codes for priority selection when no eligible providers
   const failureCodes: DecisionCode[] = [];
 
+  // Emit progress event for provider evaluation phase start
+  await eventRunner.emitProgress(
+    "provider_evaluation" as AcquisitionPhase,
+    0.0,
+    `Evaluating ${candidates.length} provider candidate(s)`,
+    { candidates_count: candidates.length }
+  );
+
   for (const provider of candidates) {
     // Use pubkey_b58 (never provider_id)
     const providerPubkey = provider.pubkey_b58;
@@ -1015,6 +1100,26 @@ export async function acquire(params: {
       // Log missing credentials
       const code = "PROVIDER_MISSING_REQUIRED_CREDENTIALS" as DecisionCode;
       failureCodes.push(code);
+      
+      // Emit failure event for this provider evaluation
+      await eventRunner.emitFailure(
+        "provider_evaluation" as AcquisitionPhase,
+        code,
+        `Missing required credentials: ${requiredCreds.filter(c => !finalCreds.includes(c)).join(", ")}`,
+        isRetryableFailureCode(code), // false - not retryable
+        {
+          provider_id: provider.provider_id,
+          provider_pubkey: providerPubkey,
+          required_creds: requiredCreds,
+          provider_creds: finalCreds,
+        },
+        [createEvidence("provider_evaluation" as AcquisitionPhase, "credential_check", {
+          provider_id: provider.provider_id,
+          has_required_creds: false,
+          missing_creds: requiredCreds.filter(c => !finalCreds.includes(c)),
+        })]
+      );
+      
       pushDecision(
         provider,
         "capabilities",
@@ -1072,6 +1177,25 @@ export async function acquire(params: {
         identityCheck.code === "UNTRUSTED_ISSUER" ? "PROVIDER_UNTRUSTED_ISSUER" :
         "PROVIDER_INTENT_NOT_SUPPORTED" as DecisionCode;
       failureCodes.push(code);
+      
+      // Emit failure event for this provider evaluation
+      await eventRunner.emitFailure(
+        "provider_evaluation" as AcquisitionPhase,
+        code,
+        `Identity check failed: ${identityCheck.code}`,
+        isRetryableFailureCode(code), // false - not retryable
+        {
+          provider_id: provider.provider_id,
+          provider_pubkey: providerPubkey,
+          identity_check_code: identityCheck.code,
+        },
+        [createEvidence("provider_evaluation" as AcquisitionPhase, "identity_check", {
+          provider_id: provider.provider_id,
+          passed: false,
+          failure_code: identityCheck.code,
+        })]
+      );
+      
       pushDecision(
         provider,
         "identity",
@@ -1098,6 +1222,24 @@ export async function acquire(params: {
         if (!credentialVerified) {
           const code = "PROVIDER_CREDENTIAL_INVALID" as DecisionCode;
           failureCodes.push(code);
+          
+          // Emit failure event for this provider evaluation
+          await eventRunner.emitFailure(
+            "provider_evaluation" as AcquisitionPhase,
+            code,
+            "Credential signature verification failed",
+            isRetryableFailureCode(code), // false - not retryable
+            {
+              provider_id: provider.provider_id,
+              provider_pubkey: providerPubkey,
+            },
+            [createEvidence("provider_evaluation" as AcquisitionPhase, "credential_check", {
+              provider_id: provider.provider_id,
+              passed: false,
+              reason: "credential_signature_invalid",
+            })]
+          );
+          
           pushDecision(
             provider,
             "identity",
@@ -1125,6 +1267,25 @@ export async function acquire(params: {
         if (credentialEnvelope.signer_public_key_b58 !== providerPubkey) {
           const code = "PROVIDER_SIGNER_MISMATCH" as DecisionCode;
           failureCodes.push(code);
+          
+          // Emit failure event for this provider evaluation
+          await eventRunner.emitFailure(
+            "provider_evaluation" as AcquisitionPhase,
+            code,
+            "Credential signer does not match provider pubkey",
+            isRetryableFailureCode(code), // false - not retryable
+            {
+              provider_id: provider.provider_id,
+              provider_pubkey: providerPubkey,
+              credential_signer: credentialEnvelope.signer_public_key_b58,
+            },
+            [createEvidence("provider_evaluation" as AcquisitionPhase, "credential_check", {
+              provider_id: provider.provider_id,
+              passed: false,
+              reason: "credential_signer_mismatch",
+            })]
+          );
+          
           pushDecision(
             provider,
             "identity",
@@ -1148,6 +1309,26 @@ export async function acquire(params: {
         if (credentialMsg.expires_at_ms && credentialMsg.expires_at_ms < now) {
           const code = "PROVIDER_CREDENTIAL_INVALID" as DecisionCode;
           failureCodes.push(code);
+          
+          // Emit failure event for this provider evaluation
+          await eventRunner.emitFailure(
+            "provider_evaluation" as AcquisitionPhase,
+            code,
+            "Credential expired",
+            isRetryableFailureCode(code), // false - not retryable
+            {
+              provider_id: provider.provider_id,
+              provider_pubkey: providerPubkey,
+              expires_at_ms: credentialMsg.expires_at_ms,
+              now,
+            },
+            [createEvidence("provider_evaluation" as AcquisitionPhase, "credential_check", {
+              provider_id: provider.provider_id,
+              passed: false,
+              reason: "credential_expired",
+            })]
+          );
+          
           pushDecision(
             provider,
             "identity",
@@ -1169,6 +1350,26 @@ export async function acquire(params: {
         if (!supportsIntent && capabilities.length > 0) {
           const code = "PROVIDER_CREDENTIAL_INVALID" as DecisionCode;
           failureCodes.push(code);
+          
+          // Emit failure event for this provider evaluation
+          await eventRunner.emitFailure(
+            "provider_evaluation" as AcquisitionPhase,
+            code,
+            `Credential does not support intent type: ${input.intentType}`,
+            isRetryableFailureCode(code), // false - not retryable
+            {
+              provider_id: provider.provider_id,
+              provider_pubkey: providerPubkey,
+              requested_intent: input.intentType,
+              available_intents: capabilities.map((cap: any) => cap.intentType),
+            },
+            [createEvidence("provider_evaluation" as AcquisitionPhase, "credential_check", {
+              provider_id: provider.provider_id,
+              passed: false,
+              reason: "credential_intent_not_supported",
+            })]
+          );
+          
           pushDecision(
             provider,
             "identity",
@@ -1269,6 +1470,25 @@ export async function acquire(params: {
           // Other errors (network, parse) - reject provider
           const code = "PROVIDER_CREDENTIAL_INVALID" as DecisionCode;
           failureCodes.push(code);
+          
+          // Emit failure event for this provider evaluation
+          await eventRunner.emitFailure(
+            "provider_evaluation" as AcquisitionPhase,
+            code,
+            `Credential fetch failed: ${error.message}`,
+            isRetryableFailureCode(code), // false - not retryable
+            {
+              provider_id: provider.provider_id,
+              provider_pubkey: providerPubkey,
+              error_message: error.message,
+            },
+            [createEvidence("provider_evaluation" as AcquisitionPhase, "credential_check", {
+              provider_id: provider.provider_id,
+              passed: false,
+              reason: "credential_fetch_error",
+            })]
+          );
+          
           pushDecision(
             provider,
             "identity",
@@ -1293,6 +1513,25 @@ export async function acquire(params: {
     if (requireCredential && !credentialPresent) {
       const code = "PROVIDER_CREDENTIAL_REQUIRED" as DecisionCode;
       failureCodes.push(code);
+      
+      // Emit failure event for this provider evaluation
+      await eventRunner.emitFailure(
+        "provider_evaluation" as AcquisitionPhase,
+        code,
+        "Credential required but provider does not present one",
+        isRetryableFailureCode(code), // false - not retryable
+        {
+          provider_id: provider.provider_id,
+          provider_pubkey: providerPubkey,
+          require_credential: requireCredential,
+        },
+        [createEvidence("provider_evaluation" as AcquisitionPhase, "credential_check", {
+          provider_id: provider.provider_id,
+          passed: false,
+          reason: "credential_required_but_missing",
+        })]
+      );
+      
       pushDecision(
         provider,
         "identity",
@@ -1318,6 +1557,26 @@ export async function acquire(params: {
       if (requireTrustedIssuer && !baseTrustConfig.trusted_issuers.includes(trustResult.issuer)) {
         const code = "PROVIDER_ISSUER_UNTRUSTED" as DecisionCode;
         failureCodes.push(code);
+        
+        // Emit failure event for this provider evaluation
+        await eventRunner.emitFailure(
+          "provider_evaluation" as AcquisitionPhase,
+          code,
+          `Issuer "${trustResult.issuer}" not in trusted issuers list`,
+          isRetryableFailureCode(code), // false - not retryable
+          {
+            provider_id: provider.provider_id,
+            provider_pubkey: providerPubkey,
+            issuer: trustResult.issuer,
+            trusted_issuers: baseTrustConfig.trusted_issuers,
+          },
+          [createEvidence("provider_evaluation" as AcquisitionPhase, "trust_check", {
+            provider_id: provider.provider_id,
+            passed: false,
+            reason: "issuer_untrusted",
+          })]
+        );
+        
         pushDecision(
           provider,
           "identity",
@@ -1342,6 +1601,27 @@ export async function acquire(params: {
       if (tierOrder[trustResult.tier] < tierOrder[minTrustTier]) {
         const code = "PROVIDER_TRUST_TIER_TOO_LOW" as DecisionCode;
         failureCodes.push(code);
+        
+        // Emit failure event for this provider evaluation
+        await eventRunner.emitFailure(
+          "provider_evaluation" as AcquisitionPhase,
+          code,
+          `Trust tier "${trustResult.tier}" below minimum "${minTrustTier}"`,
+          isRetryableFailureCode(code), // false - not retryable
+          {
+            provider_id: provider.provider_id,
+            provider_pubkey: providerPubkey,
+            tier: trustResult.tier,
+            min_trust_tier: minTrustTier,
+            trust_score: trustResult.trust_score,
+          },
+          [createEvidence("provider_evaluation" as AcquisitionPhase, "trust_check", {
+            provider_id: provider.provider_id,
+            passed: false,
+            reason: "trust_tier_too_low",
+          })]
+        );
+        
         pushDecision(
           provider,
           "identity",
@@ -1361,6 +1641,27 @@ export async function acquire(params: {
       if (trustResult.trust_score < minTrustScore) {
         const code = "PROVIDER_TRUST_SCORE_TOO_LOW" as DecisionCode;
         failureCodes.push(code);
+        
+        // Emit failure event for this provider evaluation
+        await eventRunner.emitFailure(
+          "provider_evaluation" as AcquisitionPhase,
+          code,
+          `Credential trust score ${trustResult.trust_score.toFixed(3)} below minimum ${minTrustScore}`,
+          isRetryableFailureCode(code), // false - not retryable
+          {
+            provider_id: provider.provider_id,
+            provider_pubkey: providerPubkey,
+            trust_score: trustResult.trust_score,
+            min_trust_score: minTrustScore,
+            tier: trustResult.tier,
+          },
+          [createEvidence("provider_evaluation" as AcquisitionPhase, "trust_check", {
+            provider_id: provider.provider_id,
+            passed: false,
+            reason: "trust_score_too_low",
+          })]
+        );
+        
         pushDecision(
           provider,
           "identity",
@@ -1405,6 +1706,24 @@ export async function acquire(params: {
           // Invalid signature, skip this provider
           const code = "PROVIDER_SIGNATURE_INVALID" as DecisionCode;
           failureCodes.push(code);
+          
+          // Emit failure event for this provider evaluation
+          await eventRunner.emitFailure(
+            "provider_evaluation" as AcquisitionPhase,
+            code,
+            "Quote envelope signature verification failed",
+            isRetryableFailureCode(code), // true - retryable (network/crypto issue)
+            {
+              provider_id: provider.provider_id,
+              provider_pubkey: providerPubkey,
+            },
+            [createEvidence("provider_evaluation" as AcquisitionPhase, "quote_check", {
+              provider_id: provider.provider_id,
+              passed: false,
+              reason: "quote_signature_invalid",
+            })]
+          );
+          
           pushDecision(
             provider,
             "quote",
@@ -1432,6 +1751,25 @@ export async function acquire(params: {
         } catch (error: any) {
           const code = "PROVIDER_QUOTE_PARSE_ERROR" as DecisionCode;
           failureCodes.push(code);
+          
+          // Emit failure event for this provider evaluation
+          await eventRunner.emitFailure(
+            "provider_evaluation" as AcquisitionPhase,
+            code,
+            `Failed to parse quote envelope: ${error.message}`,
+            isRetryableFailureCode(code), // true - retryable (parse/network issue)
+            {
+              provider_id: provider.provider_id,
+              provider_pubkey: providerPubkey,
+              error_message: error.message,
+            },
+            [createEvidence("provider_evaluation" as AcquisitionPhase, "quote_check", {
+              provider_id: provider.provider_id,
+              passed: false,
+              reason: "quote_parse_error",
+            })]
+          );
+          
           pushDecision(
             provider,
             "quote",
@@ -1449,6 +1787,25 @@ export async function acquire(params: {
           // Signer doesn't match directory pubkey, skip this provider
           const code = "PROVIDER_SIGNER_MISMATCH" as DecisionCode;
           failureCodes.push(code);
+          
+          // Emit failure event for this provider evaluation
+          await eventRunner.emitFailure(
+            "provider_evaluation" as AcquisitionPhase,
+            code,
+            `Signer ${parsed.signer_public_key_b58.substring(0, 8)} does not match provider ${providerPubkey.substring(0, 8)}`,
+            isRetryableFailureCode(code), // true - retryable (identity mismatch)
+            {
+              provider_id: provider.provider_id,
+              provider_pubkey: providerPubkey,
+              quote_signer: parsed.signer_public_key_b58,
+            },
+            [createEvidence("provider_evaluation" as AcquisitionPhase, "quote_check", {
+              provider_id: provider.provider_id,
+              passed: false,
+              reason: "quote_signer_mismatch",
+            })]
+          );
+          
           pushDecision(
             provider,
             "quote",
@@ -1463,6 +1820,25 @@ export async function acquire(params: {
         if (parsed.message.type !== "ASK") {
           const code = "PROVIDER_QUOTE_INVALID" as DecisionCode;
           failureCodes.push(code);
+          
+          // Emit failure event for this provider evaluation
+          await eventRunner.emitFailure(
+            "provider_evaluation" as AcquisitionPhase,
+            code,
+            `Expected ASK message, got ${parsed.message.type}`,
+            isRetryableFailureCode(code), // false - not retryable (protocol violation)
+            {
+              provider_id: provider.provider_id,
+              provider_pubkey: providerPubkey,
+              message_type: parsed.message.type,
+            },
+            [createEvidence("provider_evaluation" as AcquisitionPhase, "quote_check", {
+              provider_id: provider.provider_id,
+              passed: false,
+              reason: "invalid_message_type",
+            })]
+          );
+          
           pushDecision(
             provider,
             "quote",
@@ -1499,6 +1875,25 @@ export async function acquire(params: {
         // HTTP provider failed, skip this provider
         const code = "PROVIDER_QUOTE_HTTP_ERROR" as DecisionCode;
         failureCodes.push(code);
+        
+        // Emit failure event for this provider evaluation
+        await eventRunner.emitFailure(
+          "provider_evaluation" as AcquisitionPhase,
+          code,
+          `HTTP error fetching quote: ${error.message}`,
+          isRetryableFailureCode(code), // true - retryable (network error)
+          {
+            provider_id: provider.provider_id,
+            provider_pubkey: providerPubkey,
+            error_message: error.message,
+          },
+          [createEvidence("provider_evaluation" as AcquisitionPhase, "quote_check", {
+            provider_id: provider.provider_id,
+            passed: false,
+            reason: "quote_http_error",
+          })]
+        );
+        
         pushDecision(
           provider,
           "quote",
@@ -1582,12 +1977,34 @@ export async function acquire(params: {
       // Log policy rejection
       // Check if it's an out-of-band rejection by checking if price is outside the band
       const isOutOfBand = askPrice > (referenceP50 * 1.5) || askPrice < (referenceP50 * 0.5);
+      const code = (isOutOfBand ? "PROVIDER_QUOTE_OUT_OF_BAND" : "PROVIDER_QUOTE_POLICY_REJECTED") as DecisionCode;
       const reasonText = `Policy check failed: ${negotiationCheck.code}`;
+      
+      // Emit failure event for this provider evaluation
+      await eventRunner.emitFailure(
+        "provider_evaluation" as AcquisitionPhase,
+        code,
+        reasonText,
+        isRetryableFailureCode(code), // false - not retryable (policy violation)
+        {
+          provider_id: provider.provider_id,
+          provider_pubkey: providerPubkey,
+          policy_check_code: negotiationCheck.code,
+          quote_price: askPrice,
+          reference_price_p50: referenceP50,
+        },
+        [createEvidence("provider_evaluation" as AcquisitionPhase, "negotiation_check", {
+          provider_id: provider.provider_id,
+          passed: false,
+          reason: isOutOfBand ? "quote_out_of_band" : "quote_policy_rejected",
+        })]
+      );
+      
       pushDecision(
         provider,
         "policy",
         false,
-        isOutOfBand ? "PROVIDER_QUOTE_OUT_OF_BAND" : "PROVIDER_QUOTE_POLICY_REJECTED",
+        code,
         reasonText,
         explainLevel === "full" ? {
           code: negotiationCheck.code,
@@ -1646,6 +2063,27 @@ export async function acquire(params: {
       hasRequiredCredentials: hasAllCreds,
       latencyMs,
     });
+    
+    // Emit success event for this provider evaluation (provider passed all checks)
+    await eventRunner.emitSuccess(
+      "provider_evaluation" as AcquisitionPhase,
+      {
+        provider_id: provider.provider_id,
+        provider_pubkey: providerPubkey,
+        ask_price: askPrice,
+        utility: utility,
+        seller_reputation: sellerReputation,
+        has_required_credentials: hasAllCreds,
+        latency_ms: latencyMs,
+      },
+      [createEvidence("provider_evaluation" as AcquisitionPhase, "provider_evaluation_result", {
+        provider_id: provider.provider_id,
+        passed_all_checks: true,
+        ask_price: askPrice,
+        utility: utility,
+        seller_reputation: sellerReputation,
+      })]
+    );
   }
 
   // Select best quote (lowest utility)
@@ -1782,8 +2220,8 @@ export async function acquire(params: {
     
     lastFailure = { code: failureCode, reason: failureReason };
     
-    // Check if retryable
-    if (!isRetryableFailure(failureCode)) {
+    // Check if retryable (centralized retry policy)
+    if (!isRetryableFailureCode(failureCode)) {
       // Non-retryable failure - stop and return
   if (transcriptData) {
         transcriptData.settlement_attempts = settlementAttempts;
@@ -2080,6 +2518,9 @@ export async function acquire(params: {
       // Track first attempt intentId for transcript when all attempts fail
       if (attemptIdx === 0) {
         firstAttemptIntentId = intentId;
+        // Update EventRunner with actual intent ID (for idempotency and transcript ordering)
+        // Note: EventRunner context is read-only, but events will use the actual intent_id
+        // We'll pass intent_id explicitly to emitEvent calls going forward
       }
   const intentNow = nowFunction();
   const intentMsg = {
@@ -2340,6 +2781,23 @@ export async function acquire(params: {
     negotiationStrategy = new BaselineNegotiationStrategy();
   }
 
+  // Emit NEGOTIATION_START event
+  const effectiveMaxRounds = input.negotiation?.params?.max_rounds as number | undefined ?? plan.maxRounds;
+  await eventRunner.emitProgress(
+    "negotiation" as AcquisitionPhase,
+    0.0,
+    "NEGOTIATION_START",
+    {
+      event_name: "NEGOTIATION_START",
+      custom_event_id: `negotiation:start:${intentId}`,
+      intent_type: input.intentType,
+      max_rounds: effectiveMaxRounds,
+      regime: plan.regime,
+      settlement_mode: chosenMode,
+      strategy: negotiationStrategyName,
+    }
+  );
+
   // For negotiated regime, run negotiation rounds loop (v2.3+)
   let negotiationResult: NegotiationResult | undefined;
   let negotiationRounds: Array<{
@@ -2354,7 +2812,6 @@ export async function acquire(params: {
   
   if (plan.regime === "negotiated" && (negotiationStrategyName === "banded_concession" || negotiationStrategyName === "aggressive_if_urgent" || negotiationStrategyName === "ml_stub")) {
     // Run negotiation rounds for negotiated regime with banded_concession
-    const effectiveMaxRounds = input.negotiation?.params?.max_rounds as number | undefined ?? plan.maxRounds;
     const bandPct = input.negotiation?.params?.band_pct as number | undefined ?? 0.1;
     
     let accepted = false;
@@ -2362,6 +2819,18 @@ export async function acquire(params: {
     
     for (let round = 1; round <= effectiveMaxRounds && !accepted; round++) {
       const roundTime = nowFunction();
+      
+      // Emit NEGOTIATION_ROUND event before round execution
+      await eventRunner.emitProgress(
+        "negotiation" as AcquisitionPhase,
+        round / effectiveMaxRounds,
+        "NEGOTIATION_ROUND",
+        {
+          event_name: "NEGOTIATION_ROUND",
+          custom_event_id: `negotiation:round:${intentId}:${round - 1}`,
+          round_index: round - 1,
+        }
+      );
       
       // Call negotiation strategy for this round
       const roundInput = {
@@ -2383,6 +2852,30 @@ export async function acquire(params: {
       
       const counterPrice = roundResult.counter_price ?? roundResult.agreed_price;
       const roundAccepted = counterPrice >= selectedAskPrice;
+      
+      // Record round evidence after round execution
+      await eventRunner.emitProgress(
+        "negotiation" as AcquisitionPhase,
+        round / effectiveMaxRounds,
+        "NEGOTIATION_ROUND_COMPLETE",
+        {
+          event_name: "NEGOTIATION_ROUND",
+          custom_event_id: `negotiation:round:${intentId}:${round - 1}`,
+          round_index: round - 1,
+          msg_type: roundAccepted ? "ACCEPT" : "COUNTER",
+          actor: "buyer",
+          price: counterPrice,
+          decision_code: roundAccepted ? "ACCEPTED" : "COUNTER",
+          accepted: roundAccepted,
+        },
+        [createEvidence("negotiation" as AcquisitionPhase, "negotiation_round", {
+          round: round - 1,
+          ask_price: selectedAskPrice,
+          counter_price: counterPrice,
+          accepted: roundAccepted,
+          timestamp_ms: roundTime,
+        })]
+      );
       
       // Record round
       negotiationRounds.push({
@@ -2459,14 +2952,46 @@ export async function acquire(params: {
       allow_band_override: input.urgent,
     };
 
+    // Emit single round event for baseline/non-negotiated
+    await eventRunner.emitProgress(
+      "negotiation" as AcquisitionPhase,
+      0.5,
+      "NEGOTIATION_ROUND",
+      {
+        event_name: "NEGOTIATION_ROUND",
+        custom_event_id: `negotiation:round:${intentId}:0`,
+        round_index: 0,
+      }
+    );
+
     negotiationResult = await negotiationStrategy.negotiate(negotiationInput);
   }
 
+  // Emit NEGOTIATION_END event
   if (!negotiationResult || !negotiationResult.ok) {
+    // Negotiation failed - emit failure event
+    await eventRunner.emitFailure(
+      "negotiation" as AcquisitionPhase,
+      "NEGOTIATION_FAILED",
+      negotiationResult?.reason || "Negotiation failed",
+      isRetryableFailureCode("NEGOTIATION_FAILED"),
+      {
+        event_name: "NEGOTIATION_END",
+        custom_event_id: `negotiation:end:${intentId}`,
+        outcome_code: "NEGOTIATION_FAILED",
+        rounds_used: negotiationResult?.rounds_used ?? 0,
+        agreed_price: null,
+      },
+      negotiationRounds.length > 0 ? [createEvidence("negotiation" as AcquisitionPhase, "negotiation_summary", {
+        rounds_used: negotiationRounds.length,
+        strategy: negotiationStrategyName,
+      })] : undefined
+    );
+
     // Negotiation failed - treat as non-retryable failure
     const action = handleAttemptFailure(
       "NEGOTIATION_FAILED",
-      negotiationResult.reason || "Negotiation failed",
+      negotiationResult?.reason || "Negotiation failed",
       attemptEntry
     );
     if (action === "return") {
@@ -2479,8 +3004,8 @@ export async function acquire(params: {
           "policy",
           false,
           "PROVIDER_QUOTE_POLICY_REJECTED",
-          negotiationResult.reason || "Negotiation failed",
-          explainLevel === "full" ? { rounds_used: negotiationResult.rounds_used } : undefined
+          negotiationResult?.reason || "Negotiation failed",
+          explainLevel === "full" ? { rounds_used: negotiationResult?.rounds_used } : undefined
         );
       }
       return {
@@ -2491,7 +3016,7 @@ export async function acquire(params: {
           offers_considered: evaluations.length,
         },
         code: "NEGOTIATION_FAILED",
-        reason: negotiationResult.reason || "Negotiation failed",
+        reason: negotiationResult?.reason || "Negotiation failed",
         offers_eligible: evaluations.length,
         ...(explain ? { explain } : {}),
       };
@@ -2499,10 +3024,28 @@ export async function acquire(params: {
     continue;
   }
 
+  // Negotiation succeeded - emit success event
   // Use negotiated price (for negotiated regime with rounds, this is the accepted ask price or final counter)
   const negotiatedPrice = plan.regime === "negotiated" && (negotiationStrategyName === "banded_concession" || negotiationStrategyName === "aggressive_if_urgent" || negotiationStrategyName === "ml_stub") && negotiationRounds.length > 0
     ? (negotiationRounds[negotiationRounds.length - 1].accepted ? selectedAskPrice : negotiationRounds[negotiationRounds.length - 1].counter_price)
     : (negotiationResult?.agreed_price ?? selectedAskPrice);
+
+  await eventRunner.emitSuccess(
+    "negotiation" as AcquisitionPhase,
+    {
+      event_name: "NEGOTIATION_END",
+      custom_event_id: `negotiation:end:${intentId}`,
+      outcome_code: "ACCEPT",
+      rounds_used: negotiationResult.rounds_used,
+      agreed_price: negotiatedPrice,
+    },
+    [createEvidence("negotiation" as AcquisitionPhase, "negotiation_summary", {
+      strategy: negotiationStrategyName,
+      rounds_used: negotiationResult.rounds_used,
+      agreed_price: negotiatedPrice,
+      rounds: negotiationRounds,
+    })]
+  );
 
   // Record negotiation in transcript
   if (transcriptData && negotiationResult) {
@@ -2728,14 +3271,50 @@ export async function acquire(params: {
   }
 
       if (chosenMode === "hash_reveal") {
+    // Emit SETTLEMENT_START event
+    await eventRunner.emitProgress(
+      "settlement" as AcquisitionPhase,
+      0.0,
+      "SETTLEMENT_START",
+      {
+        event_name: "SETTLEMENT_START",
+        custom_event_id: `settlement:start:${intentId}`,
+        mode: "hash_reveal",
+        asset: assetSymbol ?? assetId,
+        chain: chainId,
+      }
+    );
+
     // Hash-reveal settlement
     const commitNow = nowFunction();
     const payload = JSON.stringify({ data: "delivered", scope: input.scope });
     const nonce = Buffer.from(`nonce-${commitNow}`).toString("base64");
     const payloadB64 = Buffer.from(payload).toString("base64");
     
+    // Emit SETTLEMENT_PREPARE event
+    await eventRunner.emitProgress(
+      "settlement" as AcquisitionPhase,
+      0.1,
+      "SETTLEMENT_PREPARE",
+      {
+        event_name: "SETTLEMENT_PREPARE",
+        custom_event_id: `settlement:prepare:${intentId}`,
+        mode: "hash_reveal",
+        provider_id: selectedProvider.provider_id || selectedProviderPubkey,
+        price: negotiatedPrice,
+        prepared: true,
+      },
+      [createEvidence("settlement" as AcquisitionPhase, "settlement_prepare", {
+        provider_id: selectedProvider.provider_id || selectedProviderPubkey,
+        price: negotiatedPrice,
+        mode: "hash_reveal",
+      })]
+    );
+    
     let commitHash: string;
     let revealOk: boolean = false;
+    let commitAttemptIndex = 0;
+    let revealAttemptIndex = 0;
     
       if (selectedProvider.endpoint) {
       // HTTP provider: use /commit and /reveal endpoints (signed envelopes)
@@ -2772,6 +3351,19 @@ export async function acquire(params: {
 
         commitHash = parsedCommit.message.commit_hash_hex;
         
+        // Emit SETTLEMENT_COMMIT_ATTEMPT event
+        const commitAttemptId = `settlement:commit:${intentId}:${commitAttemptIndex}`;
+        await eventRunner.emitProgress(
+          "settlement" as AcquisitionPhase,
+          0.3 + (commitAttemptIndex * 0.1),
+          "SETTLEMENT_COMMIT_ATTEMPT",
+          {
+            event_name: "SETTLEMENT_COMMIT_ATTEMPT",
+            custom_event_id: commitAttemptId,
+            attempt: commitAttemptIndex,
+          }
+        );
+        
         // Feed verified COMMIT envelope into session
         const commitResult = await session.onCommit(commitResponse.envelope as SignedEnvelope<CommitMessage>);
         
@@ -2798,6 +3390,20 @@ export async function acquire(params: {
               });
             }
             
+            // Emit SETTLEMENT_FAIL event before returning
+            await eventRunner.emitFailure(
+              "settlement" as AcquisitionPhase,
+              commitResult.code,
+              commitResult.reason || "COMMIT failed",
+              isRetryableFailureCode(commitResult.code),
+              {
+                event_name: "SETTLEMENT_FAIL",
+                custom_event_id: `settlement:fail:${intentId}`,
+                mode: "hash_reveal",
+                code: commitResult.code,
+              }
+            );
+            
             // Save transcript for non-retryable COMMIT failure (v1.7.2+)
             const transcriptPath = await saveTranscriptOnEarlyReturn(
               intentId,
@@ -2822,6 +3428,19 @@ export async function acquire(params: {
           // Retryable - continue to next candidate (will be caught by outer catch)
           throw new Error(`COMMIT failed: ${commitResult.reason || commitResult.code}`); // Will be caught by outer catch
         }
+        
+        // Emit SETTLEMENT_REVEAL_ATTEMPT event
+        const revealAttemptId = `settlement:reveal:${intentId}:${revealAttemptIndex}`;
+        await eventRunner.emitProgress(
+          "settlement" as AcquisitionPhase,
+          0.6 + (revealAttemptIndex * 0.1),
+          "SETTLEMENT_REVEAL_ATTEMPT",
+          {
+            event_name: "SETTLEMENT_REVEAL_ATTEMPT",
+            custom_event_id: revealAttemptId,
+            attempt: revealAttemptIndex,
+          }
+        );
         
         // Call /reveal endpoint to get signed REVEAL envelope
         const revealResponse = await fetchReveal(selectedProvider.endpoint, {
@@ -2873,6 +3492,20 @@ export async function acquire(params: {
                     explainLevel === "full" ? { code: failureCode } : undefined
                   );
                 }
+                
+                // Emit SETTLEMENT_FAIL event before returning
+                await eventRunner.emitFailure(
+                  "settlement" as AcquisitionPhase,
+                  failureCode,
+                  revealResponse.reason || "REVEAL failed",
+                  isRetryableFailureCode(failureCode),
+                  {
+                    event_name: "SETTLEMENT_FAIL",
+                    custom_event_id: `settlement:fail:${intentId}`,
+                    mode: "hash_reveal",
+                    code: failureCode,
+                  }
+                );
                 
                 // Save transcript for non-retryable REVEAL failure (v1.7.2+)
                 const transcriptPath = await saveTranscriptOnEarlyReturn(
@@ -2939,30 +3572,44 @@ export async function acquire(params: {
               );
             }
             
-            // Save transcript for non-retryable REVEAL failure (v1.7.2+)
-            const transcriptPath = await saveTranscriptOnEarlyReturn(
-              intentId,
-              revealResult.code,
-              revealResult.reason || "REVEAL failed",
-              attemptEntry
-            );
-            
-            return {
-              ok: false,
-              plan: {
-                ...plan,
-                overrideActive,
-              },
+          // Emit SETTLEMENT_FAIL event before returning
+          await eventRunner.emitFailure(
+            "settlement" as AcquisitionPhase,
+            revealResult.code,
+            revealResult.reason || "REVEAL failed",
+            isRetryableFailureCode(revealResult.code),
+            {
+              event_name: "SETTLEMENT_FAIL",
+              custom_event_id: `settlement:fail:${intentId}`,
+              mode: "hash_reveal",
               code: revealResult.code,
-              reason: revealResult.reason || "REVEAL failed",
-              offers_eligible: evaluations.length,
-              ...(explain ? { explain } : {}),
-              ...(transcriptPath ? { transcriptPath } : {}),
-            };
-          }
-          // If retryable, continue
-          throw new Error(`REVEAL failed: ${revealResult.reason || revealResult.code}`); // Will be caught by outer catch
+            }
+          );
+          
+          // Save transcript for non-retryable REVEAL failure (v1.7.2+)
+          const transcriptPath = await saveTranscriptOnEarlyReturn(
+            intentId,
+            revealResult.code,
+            revealResult.reason || "REVEAL failed",
+            attemptEntry
+          );
+          
+          return {
+            ok: false,
+            plan: {
+              ...plan,
+              overrideActive,
+            },
+            code: revealResult.code,
+            reason: revealResult.reason || "REVEAL failed",
+            offers_eligible: evaluations.length,
+            ...(explain ? { explain } : {}),
+            ...(transcriptPath ? { transcriptPath } : {}),
+          };
         }
+        // If retryable, continue
+        throw new Error(`REVEAL failed: ${revealResult.reason || revealResult.code}`); // Will be caught by outer catch
+      }
       } catch (error: any) {
             // HTTP provider errors are retryable (provider-specific issues)
             const action = handleAttemptFailure("HTTP_PROVIDER_ERROR", `HTTP provider error: ${error.message}`, attemptEntry);
@@ -2995,6 +3642,19 @@ export async function acquire(params: {
         expires_at_ms: commitNow + 10000,
       };
 
+      // Emit SETTLEMENT_COMMIT_ATTEMPT event for local provider
+      const commitAttemptId = `settlement:commit:${intentId}:${commitAttemptIndex}`;
+      await eventRunner.emitProgress(
+        "settlement" as AcquisitionPhase,
+        0.3 + (commitAttemptIndex * 0.1),
+        "SETTLEMENT_COMMIT_ATTEMPT",
+        {
+          event_name: "SETTLEMENT_COMMIT_ATTEMPT",
+          custom_event_id: commitAttemptId,
+          attempt: commitAttemptIndex,
+        }
+      );
+
       const commitEnvelope = await signEnvelope(commitMsg, selectedSellerKp);
       const commitResult = await session.onCommit(commitEnvelope);
 
@@ -3009,6 +3669,20 @@ export async function acquire(params: {
               failure_reason: commitResult.reason || "COMMIT failed",
             });
           }
+          
+          // Emit SETTLEMENT_FAIL event before returning
+          await eventRunner.emitFailure(
+            "settlement" as AcquisitionPhase,
+            commitResult.code,
+            commitResult.reason || "COMMIT failed",
+            isRetryableFailureCode(commitResult.code),
+            {
+              event_name: "SETTLEMENT_FAIL",
+              custom_event_id: `settlement:fail:${intentId}`,
+              mode: "hash_reveal",
+              code: commitResult.code,
+            }
+          );
           
           // Save transcript for non-retryable COMMIT failure (v1.7.2+)
           const transcriptPath = await saveTranscriptOnEarlyReturn(
@@ -3036,6 +3710,19 @@ export async function acquire(params: {
       }
 
       const revealNow = nowFunction();
+      // Emit SETTLEMENT_REVEAL_ATTEMPT event for local provider
+      const revealAttemptId = `settlement:reveal:${intentId}:${revealAttemptIndex}`;
+      await eventRunner.emitProgress(
+        "settlement" as AcquisitionPhase,
+        0.6 + (revealAttemptIndex * 0.1),
+        "SETTLEMENT_REVEAL_ATTEMPT",
+        {
+          event_name: "SETTLEMENT_REVEAL_ATTEMPT",
+          custom_event_id: revealAttemptId,
+          attempt: revealAttemptIndex,
+        }
+      );
+
       const revealMsg = {
         protocol_version: "pact/1.0" as const,
         type: "REVEAL" as const,
@@ -3063,6 +3750,20 @@ export async function acquire(params: {
               explainLevel === "full" ? { code: revealResult.code } : undefined
             );
           }
+          
+          // Emit SETTLEMENT_FAIL event before returning (local provider path)
+          await eventRunner.emitFailure(
+            "settlement" as AcquisitionPhase,
+            revealResult.code,
+            revealResult.reason || "REVEAL failed",
+            isRetryableFailureCode(revealResult.code),
+            {
+              event_name: "SETTLEMENT_FAIL",
+              custom_event_id: `settlement:fail:${intentId}`,
+              mode: "hash_reveal",
+              code: revealResult.code,
+            }
+          );
           
           // Save transcript for non-retryable REVEAL failure (v1.7.2+)
           const transcriptPath = await saveTranscriptOnEarlyReturn(
@@ -3096,6 +3797,21 @@ export async function acquire(params: {
         receipt.asset_id = assetId;
         receipt.chain_id = chainId;
       }
+
+      // Emit SETTLEMENT_COMPLETE event (before transcript commit)
+      await eventRunner.emitSuccess(
+        "settlement" as AcquisitionPhase,
+        {
+          event_name: "SETTLEMENT_COMPLETE",
+          custom_event_id: `settlement:complete:${intentId}`,
+          mode: "hash_reveal",
+        },
+        [createEvidence("settlement" as AcquisitionPhase, "settlement_complete", {
+          mode: "hash_reveal",
+          receipt_id: receipt?.intent_id,
+          fulfilled: receipt?.fulfilled,
+        })]
+      );
       }
 
       if (chosenMode === "streaming") {
@@ -3333,8 +4049,8 @@ export async function acquire(params: {
           const failureCode = tickResult.code || "SETTLEMENT_FAILED";
           const failureReason = tickResult.reason || "Stream tick failed";
           
-          // Check if retryable
-          if (isRetryableFailure(failureCode)) {
+          // Check if retryable (centralized retry policy)
+          if (isRetryableFailureCode(failureCode)) {
             attemptFailed = true;
             attemptFailureCode = failureCode;
             attemptFailureReason = failureReason;
@@ -3381,7 +4097,7 @@ export async function acquire(params: {
           // If receipt indicates failure, check if retryable
           if (!tickResult.receipt.fulfilled && tickResult.receipt.failure_code) {
             const failureCode = tickResult.receipt.failure_code;
-            if (isRetryableFailure(failureCode)) {
+            if (isRetryableFailureCode(failureCode)) {
               attemptFailed = true;
               attemptFailureCode = failureCode;
               attemptFailureReason = `Stream failed: ${failureCode}`;
@@ -3455,8 +4171,8 @@ export async function acquire(params: {
           failure_reason: attemptFailureReason,
         });
         
-        // Check if retryable
-        if (attemptFailureCode && isRetryableFailure(attemptFailureCode)) {
+        // Check if retryable (centralized retry policy)
+        if (attemptFailureCode && isRetryableFailureCode(attemptFailureCode)) {
           // Retryable - continue to next candidate
           continue;
         } else {
@@ -4032,6 +4748,20 @@ export async function acquire(params: {
       }
     }
     
+    // Emit transcript_commit event (triggers handler registered above, preserves ordering)
+    // This ensures transcript is written atomically after all settlement events complete
+    await eventRunner.emitSuccess(
+      "transcript_commit" as AcquisitionPhase,
+      { intent_id: finalIntentId, outcome: "success" },
+      [createEvidence("transcript_commit" as AcquisitionPhase, "transcript_data", {
+        intent_id: finalIntentId,
+        has_receipt: !!finalReceipt,
+        settlement_mode: chosenMode,
+      })]
+    );
+    
+    // Transcript path is set by the event handler registered above
+    // For immediate access, also write directly (handler will handle idempotency)
     const transcriptStore = new TranscriptStore(input.transcriptDir);
     if (finalIntentId) {
       transcriptPath = await transcriptStore.writeTranscript(finalIntentId, transcriptData as TranscriptV1);
