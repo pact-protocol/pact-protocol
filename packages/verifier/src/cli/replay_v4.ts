@@ -18,10 +18,15 @@ const __dirname = dirname(__filename);
 const sdkPath = resolve(__dirname, "../../../sdk/src/cli/replay_v4.ts");
 
 // Forward all arguments to the SDK implementation
+// This wrapper is run via: pnpm --filter @pact/sdk exec tsx src/cli/replay_v4.ts
+// So we spawn tsx from the SDK directory where dependencies are installed
 const args = process.argv.slice(2);
-const child = spawn("tsx", [sdkPath, ...args], {
+const workspaceRoot = resolve(__dirname, "../../..");
+const sdkDir = resolve(workspaceRoot, "packages/sdk");
+const child = spawn("tsx", ["src/cli/replay_v4.ts", ...args], {
   stdio: "inherit",
   shell: false,
+  cwd: sdkDir, // Run from SDK directory so Node can resolve dependencies
 });
 
 child.on("exit", (code) => {

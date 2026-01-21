@@ -17,7 +17,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "pnpm exec tsup",
+    "build": "npx tsup",
     "test": "pnpm exec vitest run",
     "start": "tsx src/server.ts",
     "registry:register": "tsx src/cli.ts register",

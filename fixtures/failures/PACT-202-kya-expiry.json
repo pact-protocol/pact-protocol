@@ -76,7 +76,7 @@
       "credential-snapshot-hash-abc123"
     ],
     "timestamp": 1000000005000,
-    "transcript_hash": "transcript-ceb622dea7c4dfc13c6a88da9a9861229668833a37b2c096531f0f992d882410"
+    "transcript_hash": "ae9d11a08df021591c66c748c58c00ab352c503831947983502ca3f97454391d"
   },
   "final_hash": "2d555b877e59cf63413121a8b5a2f645efa1ff5fb6c1de27131db68d95dafeca"
 }
