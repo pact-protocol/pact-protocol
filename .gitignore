@@ -9,6 +9,7 @@ coverage/
 .pact/
 packages/demo/.pact/
 packages/demo/demo_receipts_*.jsonl
+evidence-bundle/
 
 # Local clone folders
 pact_/
@@ -27,6 +28,10 @@ packages/provider-adapter/providers.jsonl
 /pnpm
 /tsx
 /vitest
+node
+
+# IDE and editor files
+.cursor/
 
 # Provider keypair files (contains secrets)
 keypair.json
