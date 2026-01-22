@@ -3,14 +3,15 @@
  * GC View CLI
  *
  * Generates a General Counsel-readable summary from a v4 transcript.
- * Transcript-only input; bundle support is optional (see --bundle in later releases).
+ * Default: transcript-only (--transcript). Optional: evidence bundle (--bundle).
  *
  * Usage:
  *   pnpm -C packages/verifier gc-view --transcript <path> [--out <file>]
+ *   pnpm -C packages/verifier gc-view --bundle <dir> [--out <file>]
  */
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { resolve, isAbsolute, dirname } from "node:path";
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "node:fs";
+import { resolve, isAbsolute, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TranscriptV4 } from "../util/transcript_verify.js";
 import { renderGCView } from "../gc_view/renderer.js";
@@ -21,6 +22,7 @@ const repoRoot = resolve(__dirname, "../../../..");
 
 interface ParsedArgs {
   transcript?: string;
+  bundle?: string;
   out?: string;
 }
 
@@ -33,6 +35,8 @@ function parseArgs(): ParsedArgs {
 
     if (arg === "--transcript" && i + 1 < process.argv.length) {
       args.transcript = process.argv[++i];
+    } else if (arg === "--bundle" && i + 1 < process.argv.length) {
+      args.bundle = process.argv[++i];
     } else if (arg === "--out" && i + 1 < process.argv.length) {
       args.out = process.argv[++i];
     } else if (arg.startsWith("--")) {
@@ -49,10 +53,6 @@ function parseArgs(): ParsedArgs {
  * Load transcript from file.
  */
 function loadTranscript(path: string): TranscriptV4 {
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gc_view.ts:loadTranscript:entry',message:'loadTranscript called',data:{path,isAbsolute:isAbsolute(path),cwd:process.cwd(),repoRoot},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
-  
   let resolvedPath: string;
   if (isAbsolute(path)) {
     resolvedPath = path;
@@ -61,21 +61,79 @@ function loadTranscript(path: string): TranscriptV4 {
   } else {
     resolvedPath = resolve(repoRoot, path);
     if (!existsSync(resolvedPath)) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gc_view.ts:loadTranscript:error',message:'File not found',data:{path,attemptedCwd:resolve(process.cwd(),path),attemptedRepoRoot:resolvedPath},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       throw new Error(
         `Transcript file not found: ${path}\n  Tried: ${resolve(process.cwd(), path)}\n  Tried: ${resolvedPath}`
       );
     }
   }
-  
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gc_view.ts:loadTranscript:success',message:'Path resolved',data:{originalPath:path,resolvedPath,exists:existsSync(resolvedPath)},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
 
   const content = readFileSync(resolvedPath, "utf-8");
   return JSON.parse(content) as TranscriptV4;
+}
+
+/**
+ * Load transcript from evidence bundle directory.
+ * Looks for transcript.json, manifest.json entries, or any .json with transcript_version pact-transcript/4.0.
+ */
+function loadTranscriptFromBundle(bundleDir: string): { transcript: TranscriptV4; transcriptPath: string } {
+  let resolvedDir: string;
+  if (isAbsolute(bundleDir)) {
+    resolvedDir = bundleDir;
+  } else if (existsSync(bundleDir) && statSync(bundleDir).isDirectory()) {
+    resolvedDir = resolve(process.cwd(), bundleDir);
+  } else {
+    resolvedDir = resolve(repoRoot, bundleDir);
+    if (!existsSync(resolvedDir) || !statSync(resolvedDir).isDirectory()) {
+      throw new Error(
+        `Bundle directory not found: ${bundleDir}\n  Tried: ${resolve(process.cwd(), bundleDir)}\n  Tried: ${resolvedDir}`
+      );
+    }
+  }
+
+  const transcriptPath = join(resolvedDir, "transcript.json");
+  if (existsSync(transcriptPath)) {
+    return {
+      transcript: loadTranscript(transcriptPath),
+      transcriptPath,
+    };
+  }
+
+  const manifestPath = join(resolvedDir, "manifest.json");
+  if (existsSync(manifestPath)) {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+    if (manifest.entries && Array.isArray(manifest.entries)) {
+      const transcriptEntry = manifest.entries.find((e: { type?: string }) => e.type === "transcript");
+      if (transcriptEntry?.path) {
+        const foundPath = join(resolvedDir, transcriptEntry.path);
+        if (existsSync(foundPath)) {
+          return {
+            transcript: loadTranscript(foundPath),
+            transcriptPath: foundPath,
+          };
+        }
+      }
+    }
+  }
+
+  const files = readdirSync(resolvedDir);
+  for (const file of files) {
+    if (file.endsWith(".json") && file !== "manifest.json") {
+      const candidatePath = join(resolvedDir, file);
+      try {
+        const content = JSON.parse(readFileSync(candidatePath, "utf-8"));
+        if (content.transcript_version === "pact-transcript/4.0") {
+          return {
+            transcript: content as TranscriptV4,
+            transcriptPath: candidatePath,
+          };
+        }
+      } catch {
+        /* skip */
+      }
+    }
+  }
+
+  throw new Error(`No transcript found in bundle directory: ${bundleDir}`);
 }
 
 /**
@@ -95,45 +153,31 @@ function normalizePath(path: string): string {
 
 export async function main(): Promise<void> {
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gc_view.ts:main:entry',message:'main started',data:{argv:process.argv.slice(2),cwd:process.cwd(),repoRoot},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-    
     const args = parseArgs();
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gc_view.ts:main:argsParsed',message:'Args parsed',data:{args},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
 
-    if (!args.transcript) {
+    let transcript: TranscriptV4;
+    let transcriptPath: string;
+    let bundlePath: string | undefined;
+
+    if (args.bundle) {
+      const result = loadTranscriptFromBundle(args.bundle);
+      transcript = result.transcript;
+      transcriptPath = normalizePath(result.transcriptPath);
+      bundlePath = normalizePath(args.bundle);
+    } else if (args.transcript) {
+      transcript = loadTranscript(args.transcript);
+      transcriptPath = normalizePath(args.transcript);
+    } else {
       console.error("Usage: gc_view --transcript <path> [--out <file>]");
+      console.error("   or: gc_view --bundle <dir> [--out <file>]");
       process.exitCode = 1;
       return;
     }
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gc_view.ts:main:beforeLoad',message:'About to load transcript',data:{transcriptPath:args.transcript},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-
-    const transcript = loadTranscript(args.transcript);
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gc_view.ts:main:afterLoad',message:'Transcript loaded',data:{transcriptId:transcript.transcript_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-    
-    const transcriptPath = normalizePath(args.transcript);
-
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gc_view.ts:main:beforeRender',message:'About to render GC view',data:{transcriptPath},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-
     const gcView = await renderGCView(transcript, {
       transcriptPath,
+      bundlePath,
     });
-
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gc_view.ts:main:afterRender',message:'GC view rendered',data:{version:gcView.version},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
 
     const jsonOutput = JSON.stringify(gcView, null, 2);
 
@@ -144,14 +188,7 @@ export async function main(): Promise<void> {
     } else {
       console.log(jsonOutput);
     }
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gc_view.ts:main:success',message:'main completed',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
   } catch (error) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'gc_view.ts:main:error',message:'Error in main',data:{errorMessage:error instanceof Error ? error.message : String(error),errorStack:error instanceof Error ? error.stack : undefined,errorName:error instanceof Error ? error.name : undefined},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     if (error instanceof Error && error.stack) {
       console.error(error.stack);
