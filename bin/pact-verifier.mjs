@@ -29,6 +29,7 @@ const subcommands = {
   "insurer-summary": join(verifierDist, "insurer_summary.js"),
   "judge-v4": join(verifierDist, "judge_v4.js"),
   "passport-v1-recompute": join(verifierDist, "passport_v1_recompute.js"),
+  "passport-v1-query": join(verifierDist, "passport_v1_query.js"),
   "contention-scan": join(verifierDist, "contention_scan.js"),
 };
 

@@ -221,6 +221,11 @@ export function computePassportDelta(inputs: PassportInputs): PassportDelta {
     return delta;
   }
   
+  // Rule 3b: INDETERMINATE_TAMPER — do not penalize agent; increases scrutiny only
+  if (dbl_judgment?.dblDetermination === "INDETERMINATE_TAMPER") {
+    return delta;
+  }
+
   // Rule 4: Disputes
   if (outcome === "dispute" && dbl_judgment) {
     const { buyer_id, seller_id } = transcript_summary;
@@ -251,9 +256,13 @@ export function computePassportDelta(inputs: PassportInputs): PassportDelta {
     return delta;
   }
   
-  // Rule 5: Integrity tamper
-  if (dbl_judgment?.notes?.includes("final hash mismatch") || 
-      dbl_judgment?.notes?.includes("FINAL_HASH_MISMATCH")) {
+  // Rule 5: Integrity tamper (legacy path when DBL did not set INDETERMINATE_TAMPER)
+  // Do not apply penalty if already handled as INDETERMINATE_TAMPER above
+  if (
+    dbl_judgment?.dblDetermination !== "INDETERMINATE_TAMPER" &&
+    (dbl_judgment?.notes?.includes("final hash mismatch") ||
+      dbl_judgment?.notes?.includes("FINAL_HASH_MISMATCH"))
+  ) {
     delta.score_delta -= 0.2;
     return delta;
   }

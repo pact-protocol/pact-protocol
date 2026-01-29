@@ -84,8 +84,11 @@ pnpm verifier:build
 # Use executable entrypoint (no pnpm banners)
 ./bin/pact-verifier gc-view --transcript fixtures/success/SUCCESS-001-simple.json | jq '.version'
 ./bin/pact-verifier passport-v1-recompute --transcripts-dir fixtures/success | jq '.version'
+./bin/pact-verifier passport-v1-query --signer <pubkey> [--registry registry.json]
 ./bin/pact-verifier judge-v4 fixtures/success/SUCCESS-001-simple.json | jq '.status'
 ```
+
+`passport-v1-recompute` accepts **multiple** `--transcripts-dir` arguments; transcripts are merged deterministically and duplicate transcripts emit a warning (multi-source ready for future registry ingestion).
 
 > **Note:** v3 remains stable and maintained. See [versions/v3/GETTING_STARTED.md](./docs/versions/v3/GETTING_STARTED.md) for v3 documentation.
 
@@ -98,9 +101,10 @@ pnpm verifier:build
 **Core Features:**
 - **[Pact Boundary Runtime](./docs/versions/v4/POLICY.md)** — Non-bypassable policy enforcement (`pnpm demo:v4:canonical`)
 - **[Policy-as-Code v4](./docs/versions/v4/POLICY.md)** — Deterministic, audit-grade constraint system
-- **[Passport v1](./docs/versions/v4/PASSPORT.md)** — Agent reputation scoring and credit eligibility
+- **[Passport v1](./docs/versions/v4/PASSPORT.md)** — Agent reputation scoring and credit eligibility; **[Passport Registry Contract](./docs/passport/PASSPORT_REGISTRY_CONTRACT.md)** — Immutable, append-only, deterministic; fault domain **INDETERMINATE_TAMPER** for integrity failures (no agent penalty, underwriter scrutiny)
 - **[Evidence Bundles](./docs/versions/v4/EVIDENCE_BUNDLE.md)** — Courtroom-grade audit artifacts
 - **[Transcript Redaction](./docs/versions/v4/REDACTION.md)** — Share transcripts across trust boundaries
+- **Evidence Viewer** — Copy Transcript ID; Export GC View as Legal PDF; Export Insurer Summary PDF; Generate Claims Intake Package (ZIP); Passport Panel (buyer/provider tiers, scores, warnings). Run: `pnpm -C apps/evidence-viewer dev`
 
 **Real-world provider examples:**
 - **[Weather Provider](./examples/providers/weather-provider/)** — Complete `weather.data` provider with deterministic pricing (`pnpm example:provider:weather`)
@@ -178,6 +182,9 @@ Pact v4 is the first moment where Pact can truthfully be described as **institut
 - ✅ **Credit v1** — Undercollateralized commitments
 - ✅ **Evidence Bundles** — Courtroom-grade audit artifacts
 - ✅ **Transcript Redaction** — Cross-trust-boundary sharing
+- ✅ **Evidence Viewer** — Copy Transcript ID; Export GC View / Insurer Summary PDFs; Claims Intake Package (ZIP); Passport Panel
+- ✅ **Verifier** — `passport-v1-recompute` (multi-source: multiple `--transcripts-dir`, deterministic merge, duplicate warning); `passport-v1-query` (local registry query)
+- ✅ **Passport** — Registry contract (immutable, append-only); **INDETERMINATE_TAMPER** fault domain (integrity failure → no agent penalty, underwriter scrutiny)
 
 See [versions/v4/STATUS.md](./docs/versions/v4/STATUS.md) for complete feature list.
 
@@ -307,6 +314,8 @@ Without these packages, PACT uses boundary mode (clear errors, no external calls
 - **[versions/v4/EVIDENCE_BUNDLE.md](./docs/versions/v4/EVIDENCE_BUNDLE.md)** — Evidence Bundles (courtroom-grade audit artifacts)
 - **[versions/v4/REDACTION.md](./docs/versions/v4/REDACTION.md)** — Transcript Redaction (cross-trust-boundary sharing)
 - **[versions/v4/FAILURE_TAXONOMY.md](./docs/versions/v4/FAILURE_TAXONOMY.md)** — Failure Taxonomy (canonical error classification)
+- **[passport/PASSPORT_REGISTRY_CONTRACT.md](./docs/passport/PASSPORT_REGISTRY_CONTRACT.md)** — Passport registry contract (immutability, determinism, append-only, INDETERMINATE_TAMPER, explicit non-goals)
+- **[gc/EVIDENCE_VIEWER_SPEC.md](./docs/gc/EVIDENCE_VIEWER_SPEC.md)** — Evidence Viewer specification; see `apps/evidence-viewer/README.md` for Copy Transcript ID, PDF exports, Claims Intake Package, Passport Panel
 
 **Integration Guides:**
 - **[integrations/INTEGRATION_ESCROW.md](./docs/integrations/INTEGRATION_ESCROW.md)** — EVM escrow contract integration

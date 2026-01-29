@@ -248,6 +248,10 @@ async function generateInsurerSummary(
     if (faultDomain === "NO_FAULT") {
       return 0.01;
     }
+    // Tamper/integrity: do not penalize agent; increases scrutiny only
+    if (faultDomain === "INDETERMINATE_TAMPER") {
+      return 0;
+    }
     if (isProvider && (faultDomain === "PROVIDER_AT_FAULT" || faultDomain === "PROVIDER_RAIL_AT_FAULT")) {
       return -0.05;
     }

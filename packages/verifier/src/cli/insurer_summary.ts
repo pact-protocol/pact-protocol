@@ -127,6 +127,9 @@ function computePassportDelta(
   if (faultDomain === "NO_FAULT") {
     // Success: both parties gain slightly
     delta = 0.01;
+  } else if (faultDomain === "INDETERMINATE_TAMPER") {
+    // Tamper/integrity failure: do not penalize agent; increases scrutiny only
+    delta = 0;
   } else if (faultDomain === "PROVIDER_AT_FAULT") {
     delta = isProvider ? -0.05 : 0.01;
   } else if (faultDomain === "BUYER_AT_FAULT") {
@@ -227,6 +230,10 @@ function computeRiskFactors(
     factors.push("BUYER_FAULT");
   }
   
+  if (faultDomain === "INDETERMINATE_TAMPER") {
+    factors.push("INDETERMINATE_TAMPER");
+  }
+  
   return factors;
 }
 
@@ -249,6 +256,10 @@ function computeSurcharges(
   
   if (riskFactors.includes("SLA_TIMEOUT")) {
     surcharges.push("SLA");
+  }
+  
+  if (riskFactors.includes("INDETERMINATE_TAMPER")) {
+    surcharges.push("TAMPER_SCRUTINY");
   }
   
   if (hasNonStandardConstitution) {

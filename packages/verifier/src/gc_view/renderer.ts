@@ -700,8 +700,11 @@ function generateGCTakeaways(
   } else if (status === "DISPUTED") {
     approval_risk = "HIGH";
     why.push("Transaction resulted in dispute - requires resolution");
-    if (judgment?.dblDetermination === "INDETERMINATE") {
+    if (judgment?.dblDetermination === "INDETERMINATE" || judgment?.dblDetermination === "INDETERMINATE_TAMPER") {
       open_questions.push("Can fault be determined from available evidence?");
+    }
+    if (judgment?.dblDetermination === "INDETERMINATE_TAMPER") {
+      open_questions.push("Integrity/tamper: fault cannot be assigned to agent; underwriter scrutiny required.");
     }
     recommended_remediation.push("Resolve dispute before approval");
   } else if (status === "FAILED_TIMEOUT") {

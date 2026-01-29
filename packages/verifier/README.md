@@ -67,16 +67,17 @@ pact-verifier contention-scan --transcripts-dir ./transcripts
 
 ## Available Commands
 
-| Command                  | Description                                      |
-|--------------------------|--------------------------------------------------|
-| `auditor-pack`           | Create portable evidence ZIP for auditors/claims |
-| `auditor-pack-verify`    | Verify integrity of an auditor pack ZIP          |
-| `gc-view`                | Generate GC-readable summary from v4 transcript  |
-| `gc-summary`             | Quick one-liner GC fields (no jq needed)         |
-| `insurer-summary`        | Underwriter-focused risk/coverage analysis       |
-| `judge-v4`               | Run DBL judgment, output deterministic artifact  |
-| `passport-v1-recompute`  | Recompute Passport v1 states from transcripts    |
-| `contention-scan`        | Detect DOUBLE_COMMIT and contention violations   |
+| Command                  | Description                                                                 |
+|--------------------------|-----------------------------------------------------------------------------|
+| `auditor-pack`           | Create portable evidence ZIP for auditors/claims                            |
+| `auditor-pack-verify`    | Verify integrity of an auditor pack ZIP                                     |
+| `gc-view`                | Generate GC-readable summary from v4 transcript                             |
+| `gc-summary`             | Quick one-liner GC fields (no jq needed)                                    |
+| `insurer-summary`        | Underwriter-focused risk/coverage analysis                                 |
+| `judge-v4`               | Run DBL judgment, output deterministic artifact                            |
+| `passport-v1-recompute`  | Recompute Passport v1 states from transcripts (multi-source ready; see below) |
+| `passport-v1-query`      | Query local passport registry by signer pubkey                             |
+| `contention-scan`        | Detect DOUBLE_COMMIT and contention violations                             |
 
 ## GC View Example
 
@@ -130,6 +131,32 @@ Output:
 ```
 
 Coverage decisions: `COVERED | COVERED_WITH_SURCHARGE | ESCROW_REQUIRED | EXCLUDED`
+
+## Passport v1 (Registry-Ready)
+
+### Recompute (multi-source)
+
+Recompute passport state from one or more transcript directories. **Multi-source ready**: you can pass multiple `--transcripts-dir` arguments; transcripts are merged deterministically (by stable transcript ID), and duplicate transcripts emit a warning (first occurrence wins).
+
+```bash
+# Single directory
+pact-verifier passport-v1-recompute --transcripts-dir ./transcripts
+
+# Multiple directories (merged deterministically; warns on duplicates)
+pact-verifier passport-v1-recompute --transcripts-dir ./dir1 --transcripts-dir ./dir2 --out registry.json
+```
+
+Output includes `version`, `signer`, `role` (BUYER/PROVIDER/UNKNOWN), `score`, `tier` (A/B/C/D), `history`, `last_updated`, `constitution_hash`. No global registry is built by default; the CLI is ready for multi-source ingestion.
+
+### Query local registry
+
+Query a local JSON registry by signer public key:
+
+```bash
+pact-verifier passport-v1-query --signer <base58_pubkey> [--registry registry.json]
+```
+
+If `--registry` is omitted, a default path is used. See [Passport Registry Contract](../../docs/passport/PASSPORT_REGISTRY_CONTRACT.md) for immutability, determinism, append-only, and fault domain **INDETERMINATE_TAMPER** (integrity failure → no agent penalty, underwriter scrutiny).
 
 ## Auditor Pack (Evidence Export)
 
@@ -214,6 +241,7 @@ The same constitution hash guarantees the same judgment for the same transcript.
 
 ## Related Documentation
 
+- [Passport Registry Contract](../../docs/passport/PASSPORT_REGISTRY_CONTRACT.md) — Immutability, determinism, append-only, INDETERMINATE_TAMPER, explicit non-goals
 - [GC 5-Minute Approval Checklist](../../docs/gc/GC_5_MINUTE_APPROVAL_CHECKLIST.md)
 - [Insurer Underwriting View](../../docs/gc/INSURER_UNDERWRITING_VIEW.md)
 - [Provider Failures (PACT-420/421)](../../docs/pilots/PROVIDER_FAILURES.md)

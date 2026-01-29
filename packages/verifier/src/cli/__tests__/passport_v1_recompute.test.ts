@@ -102,6 +102,8 @@ describe("Passport v1 Recompute CLI", () => {
 
         // Check structure
         expect(output.version).toBe("passport/1.0");
+        expect(output.generated_from.transcripts_dirs).toBeDefined();
+        expect(Array.isArray(output.generated_from.transcripts_dirs)).toBe(true);
         expect(output.generated_from.count).toBe(1);
         expect(output.states).toBeDefined();
 
@@ -221,8 +223,10 @@ describe("Passport v1 Recompute CLI", () => {
         // Compare states (should be identical)
         expect(states1).toEqual(states2);
         
-        // Compare generated_from (count should match, dir may differ)
+        // Compare generated_from (count should match, dirs may differ)
         expect(gen1.count).toBe(gen2.count);
+        expect(Array.isArray(gen1.transcripts_dirs)).toBe(true);
+        expect(Array.isArray(gen2.transcripts_dirs)).toBe(true);
       } finally {
         [tempDir1, tempDir2].forEach((dir) => {
           if (existsSync(dir)) {
@@ -471,6 +475,66 @@ describe("Passport v1 Recompute CLI", () => {
         if (existsSync(tempDir)) {
           rmSync(tempDir, { recursive: true, force: true });
         }
+      }
+    });
+
+    it("should accept multiple --transcripts-dir and merge deterministically", async () => {
+      const tempDir1 = join(repoRoot, "tmp_test_multi_1");
+      const tempDir2 = join(repoRoot, "tmp_test_multi_2");
+      [tempDir1, tempDir2].forEach((dir) => {
+        if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+        mkdirSync(dir, { recursive: true });
+      });
+
+      try {
+        const fixture1 = loadFixture("success/SUCCESS-001-simple.json");
+        let f2: any;
+        try {
+          f2 = loadFixture("success/SUCCESS-002-negotiated.json");
+        } catch {
+          f2 = JSON.parse(JSON.stringify(fixture1));
+          f2.transcript_id = "transcript-other-for-test";
+          f2.intent_id = "intent-other";
+        }
+        writeFileSync(join(tempDir1, "a.json"), JSON.stringify(fixture1, null, 2));
+        writeFileSync(join(tempDir2, "b.json"), JSON.stringify(f2, null, 2));
+
+        const result = await runCLI([`--transcripts-dir`, tempDir1, `--transcripts-dir`, tempDir2]);
+        expect(result.exitCode).toBe(0);
+        const output = JSON.parse(result.stdout);
+        expect(output.generated_from.transcripts_dirs).toBeDefined();
+        expect(output.generated_from.transcripts_dirs.length).toBe(2);
+        expect(output.generated_from.count).toBe(2);
+      } finally {
+        [tempDir1, tempDir2].forEach((dir) => {
+          if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+        });
+      }
+    });
+
+    it("should emit warning when same transcript appears in multiple directories", async () => {
+      const tempDir1 = join(repoRoot, "tmp_test_dup_1");
+      const tempDir2 = join(repoRoot, "tmp_test_dup_2");
+      [tempDir1, tempDir2].forEach((dir) => {
+        if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+        mkdirSync(dir, { recursive: true });
+      });
+
+      try {
+        const fixture = loadFixture("success/SUCCESS-001-simple.json");
+        writeFileSync(join(tempDir1, "same.json"), JSON.stringify(fixture, null, 2));
+        writeFileSync(join(tempDir2, "same.json"), JSON.stringify(fixture, null, 2));
+
+        const result = await runCLI([`--transcripts-dir`, tempDir1, `--transcripts-dir`, tempDir2]);
+        expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain("Duplicate transcript");
+        expect(result.stderr).toContain("keeping first occurrence");
+        const output = JSON.parse(result.stdout);
+        expect(output.generated_from.count).toBe(1);
+      } finally {
+        [tempDir1, tempDir2].forEach((dir) => {
+          if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
+        });
       }
     });
   });

@@ -311,6 +311,31 @@ if (result.ok) {
 
 ---
 
+### 7. Passport v1 (Registry-Ready)
+
+**Functionality:**
+- **`passport-v1-recompute`** — Recompute passport state from verified transcripts. **Multi-source ready**: accept multiple `--transcripts-dir` arguments; transcripts are merged deterministically (by stable transcript ID); duplicate transcripts emit a warning (first occurrence wins). Output: extended passport record (version, signer, role, score, tier, history, last_updated, constitution_hash).
+- **`passport-v1-query`** — Query a local JSON registry by signer public key (`--signer`, optional `--registry`).
+
+**Output (recompute):**
+- Passport record(s) with score, tier (A/B/C/D), history of transcript events, constitution hash. No global registry is built by default; the CLI is ready for multi-source ingestion.
+
+**Example:**
+```bash
+# Single directory
+pact-verifier passport-v1-recompute --transcripts-dir ./transcripts
+
+# Multiple directories (merged deterministically; warns on duplicates)
+pact-verifier passport-v1-recompute --transcripts-dir ./dir1 --transcripts-dir ./dir2 --out registry.json
+
+# Query local registry
+pact-verifier passport-v1-query --signer <base58_pubkey> [--registry registry.json]
+```
+
+**Related:** [Passport Registry Contract](../../passport/PASSPORT_REGISTRY_CONTRACT.md) — Immutability, determinism, append-only, fault domain **INDETERMINATE_TAMPER** (integrity failure → no agent penalty, underwriter scrutiny), explicit non-goals
+
+---
+
 ## What the Verifier Does NOT Do
 
 ### ❌ No Negotiation

@@ -58,7 +58,8 @@ export type JudgmentArtifact = {
     | "PROVIDER_AT_FAULT"
     | "BUYER_RAIL_AT_FAULT"
     | "PROVIDER_RAIL_AT_FAULT"
-    | "INDETERMINATE";
+    | "INDETERMINATE"
+    | "INDETERMINATE_TAMPER";
   passportImpact: number; // -0.05 for actor fault, 0.0 for rail/no-fault/indeterminate
   confidence: number;
   recommendation: string;
@@ -651,10 +652,10 @@ export async function resolveBlameV1(
     try { appendFileSync("/Users/seankoons/Desktop/pact/.cursor/debug.log", JSON.stringify({location:"blame_resolver_v1.ts:604",message:"Integrity failure detected",data:{failureCode,hasIntegrityFailure},timestamp:Date.now(),sessionId:"debug-session",runId:"run1",hypothesisId:"B"})+"\n"); } catch(e) {}
     // #endregion
     artifact.status = "FAILED";
-    artifact.dblDetermination = "INDETERMINATE";
+    artifact.dblDetermination = "INDETERMINATE_TAMPER";
     artifact.confidence = 0.0;
     artifact.passportImpact = 0.0;
-    artifact.recommendation = "Integrity validation failed - cannot determine fault";
+    artifact.recommendation = "Integrity validation failed - tamper or corruption; fault cannot be assigned to agent";
     artifact.notes = "Hash chain or signature verification failed";
     
     // State machine: INTEGRITY failure => terminal=true, required_next_actor=NONE

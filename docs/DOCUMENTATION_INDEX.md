@@ -109,6 +109,16 @@ Complete index of all PACT documentation for easy reference.
 - [versions/v4/EVIDENCE_BUNDLE.md](./versions/v4/EVIDENCE_BUNDLE.md) - Evidence Bundles
 - [versions/v4/REDACTION.md](./versions/v4/REDACTION.md) - Transcript Redaction
 - [versions/v4/FAILURE_TAXONOMY.md](./versions/v4/FAILURE_TAXONOMY.md) - Failure Taxonomy
+- [versions/v4/VERIFIER.md](./versions/v4/VERIFIER.md) - Verifier CLI (gc-view, insurer-summary, passport-v1-recompute, passport-v1-query)
+
+### Passport & Registry
+- [passport/PASSPORT_REGISTRY_CONTRACT.md](./passport/PASSPORT_REGISTRY_CONTRACT.md) - Passport registry contract (immutability, determinism, append-only, INDETERMINATE_TAMPER, explicit non-goals)
+- [passport/PASSPORT_REGISTRY_SPEC_v0.md](./passport/PASSPORT_REGISTRY_SPEC_v0.md) - Passport registry spec v0
+
+### Evidence Viewer & GC
+- [gc/EVIDENCE_VIEWER_SPEC.md](./gc/EVIDENCE_VIEWER_SPEC.md) - Evidence Viewer specification
+- [gc/GC_5_MINUTE_APPROVAL_CHECKLIST.md](./gc/GC_5_MINUTE_APPROVAL_CHECKLIST.md) - GC 5-minute approval checklist
+- [gc/INSURER_UNDERWRITING_VIEW.md](./gc/INSURER_UNDERWRITING_VIEW.md) - Insurer underwriting view
 
 ### ML & Training
 - [versions/v2/TRAINING_DATA_FORMAT.md](./versions/v2/TRAINING_DATA_FORMAT.md) - Training data format
@@ -155,6 +165,17 @@ Complete index of all PACT documentation for easy reference.
 1. Read [distribution/NPM_PUBLISHING.md](./distribution/NPM_PUBLISHING.md)
 2. Run pre-publish checklist
 3. Publish packages
+
+**Evidence Viewer (Auditor Packs):**
+1. Run `pnpm -C apps/evidence-viewer dev` and open http://localhost:5173
+2. Load an Auditor Pack ZIP (upload or demo mode)
+3. Use Copy Transcript ID; Export GC View / Insurer Summary PDFs; Generate Claims Intake Package; view Passport Panel
+4. See [gc/EVIDENCE_VIEWER_SPEC.md](./gc/EVIDENCE_VIEWER_SPEC.md) and repo root `apps/evidence-viewer/README.md`
+
+**Passport Registry (multi-source ready):**
+1. Recompute from multiple transcript directories: `pact-verifier passport-v1-recompute --transcripts-dir dir1 --transcripts-dir dir2`
+2. Query local registry: `pact-verifier passport-v1-query --signer <pubkey> [--registry registry.json]`
+3. See [passport/PASSPORT_REGISTRY_CONTRACT.md](./passport/PASSPORT_REGISTRY_CONTRACT.md)
 
 **Production Readiness:**
 1. Read [architecture/ERROR_HANDLING.md](./architecture/ERROR_HANDLING.md) for error handling patterns

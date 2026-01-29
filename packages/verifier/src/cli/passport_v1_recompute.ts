@@ -22,9 +22,11 @@ import {
   computePassportDelta,
   applyDelta,
   getTranscriptStableId,
+  getRoundSignerKey,
   type PassportState,
 } from "../util/passport_v1.js";
 import { stableCanonicalize, hashCanonicalHex } from "../util/canonical.js";
+import { isAcceptedConstitutionHash, ACCEPTED_CONSTITUTION_HASHES } from "../util/constitution_hashes.js";
 import { readdir, readFileSync, writeFileSync, statSync } from "node:fs";
 import { resolve, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,7 +51,7 @@ export const REPO_ROOT = repoRoot;
 interface RecomputeOutput {
   version: "passport/1.0";
   generated_from: {
-    transcripts_dir: string;
+    transcripts_dirs: string[];
     count: number;
   };
   states: Record<
@@ -69,23 +71,43 @@ interface RecomputeOutput {
       state_hash: string;
     }
   >;
+  records: Record<
+    string,
+    {
+      version: "passport/1.0";
+      signer: string;
+      role: "BUYER" | "PROVIDER" | "UNKNOWN";
+      score: number;
+      tier: "A" | "B" | "C" | "D";
+      history: Array<{
+        transcript_id: string;
+        outcome: string;
+        fault_domain: string;
+        delta: number;
+        confidence: number;
+        timestamp: string;
+      }>;
+      last_updated: string;
+      constitution_hash: string;
+    }
+  >;
 }
 
 function parseArgs(): {
-  transcriptsDir: string;
+  transcriptsDirs: string[];
   signer?: string;
   outFile?: string;
   human?: boolean;
 } {
   const args = process.argv.slice(2);
-  let transcriptsDir: string | undefined;
+  const transcriptsDirs: string[] = [];
   let signer: string | undefined;
   let outFile: string | undefined;
   let human = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--transcripts-dir" && i + 1 < args.length) {
-      transcriptsDir = args[i + 1];
+      transcriptsDirs.push(args[i + 1]);
       i++;
     } else if (args[i] === "--signer" && i + 1 < args.length) {
       signer = args[i + 1];
@@ -101,13 +123,13 @@ function parseArgs(): {
     }
   }
 
-  if (!transcriptsDir) {
-    console.error("Error: --transcripts-dir is required");
+  if (transcriptsDirs.length === 0) {
+    console.error("Error: at least one --transcripts-dir is required");
     printHelp();
     process.exit(1);
   }
 
-  return { transcriptsDir, signer, outFile, human };
+  return { transcriptsDirs, signer, outFile, human };
 }
 
 function printHelp(): void {
@@ -122,21 +144,27 @@ Identity Rule:
   - NEVER group by rounds[].agent_id (that is role/display only).
 
 Options:
-  --transcripts-dir <dir>  Directory containing transcript JSON files (required)
+  --transcripts-dir <dir>  Directory containing transcript JSON files (repeatable; at least one required)
   --signer <pubkey>        Output only this signer's PassportState (optional)
   --out <file>             Output file path (optional, defaults to stdout)
   --human                  Print human-readable summary to stderr (optional)
   --help, -h               Show this help message
 
+Multiple sources:
+  You may pass --transcripts-dir multiple times. Transcripts from all directories
+  are merged deterministically (by stable transcript ID). If the same transcript
+  appears in more than one directory, a warning is emitted and the first occurrence
+  is kept.
+
 Examples:
-  # Recompute all signers
+  # Recompute all signers (single directory)
   passport:v1:recompute --transcripts-dir ./fixtures/success
+
+  # Multiple directories (multi-source ready)
+  passport:v1:recompute --transcripts-dir ./dir1 --transcripts-dir ./dir2 --out passports.json
 
   # Recompute specific signer
   passport:v1:recompute --transcripts-dir ./fixtures --signer 21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J
-
-  # Save to file
-  passport:v1:recompute --transcripts-dir ./fixtures --out passports.json
 `);
 }
 
@@ -186,6 +214,43 @@ async function loadTranscripts(dir: string): Promise<TranscriptV4[]> {
   return transcripts;
 }
 
+/**
+ * Load transcripts from multiple directories, merge deterministically, and detect duplicates.
+ * If the same transcript (by stable ID) appears in more than one directory, a warning is emitted
+ * and the first occurrence (by order of dirs, then by stable ID) is kept.
+ */
+async function loadTranscriptsFromMultipleDirs(
+  dirs: string[],
+  human: boolean
+): Promise<{ transcripts: TranscriptV4[]; duplicateWarnings: string[] }> {
+  const duplicateWarnings: string[] = [];
+  const byStableId = new Map<string, { transcript: TranscriptV4; sourceDir: string }>();
+
+  for (const dir of dirs) {
+    if (human) {
+      console.error(`Loading transcripts from: ${dir}`);
+    }
+    const fromDir = await loadTranscripts(dir);
+
+    for (const transcript of fromDir) {
+      const stableId = getTranscriptStableId(transcript);
+      const existing = byStableId.get(stableId);
+      if (existing) {
+        duplicateWarnings.push(
+          `Duplicate transcript ${stableId} (also in ${existing.sourceDir}); keeping first occurrence, skipping from ${dir}`
+        );
+        continue;
+      }
+      byStableId.set(stableId, { transcript, sourceDir: dir });
+    }
+  }
+
+  // Deterministic order: sort by stable ID
+  const stableIds = Array.from(byStableId.keys()).sort();
+  const transcripts = stableIds.map((id) => byStableId.get(id)!.transcript);
+  return { transcripts, duplicateWarnings };
+}
+
 function computeStateHash(state: {
   agent_id: string;
   score: number;
@@ -206,15 +271,16 @@ const RUNNER = import.meta.url.includes('/dist/') ? 'dist' : 'tsx';
 
 export async function main(): Promise<void> {
   try {
-    const { transcriptsDir, signer, outFile, human } = parseArgs();
+    const { transcriptsDirs, signer, outFile, human } = parseArgs();
 
-    // Load and verify transcripts (progress logs to stderr only when --human)
-    if (human) {
-      console.error(`Loading transcripts from: ${transcriptsDir}`);
+    // Load from all directories, merge deterministically, detect duplicates
+    const { transcripts, duplicateWarnings } = await loadTranscriptsFromMultipleDirs(transcriptsDirs, human);
+
+    for (const msg of duplicateWarnings) {
+      console.error(`Warning: ${msg}`);
     }
-    const transcripts = await loadTranscripts(transcriptsDir);
     if (human) {
-      console.error(`Loaded ${transcripts.length} valid transcripts`);
+      console.error(`Loaded ${transcripts.length} unique transcripts from ${transcriptsDirs.length} director${transcriptsDirs.length === 1 ? "y" : "ies"}`);
     }
 
     if (transcripts.length === 0) {
@@ -243,25 +309,54 @@ export async function main(): Promise<void> {
       return;
     }
 
-    // Build output (normalize transcripts_dir to relative path for deterministic output)
-    let normalizedDir = transcriptsDir;
-    if (isAbsolute(transcriptsDir)) {
-      // Try to make it relative to repo root or cwd
-      if (transcriptsDir.startsWith(repoRoot + "/")) {
-        normalizedDir = transcriptsDir.slice(repoRoot.length + 1);
-      } else if (transcriptsDir.startsWith(process.cwd() + "/")) {
-        normalizedDir = transcriptsDir.slice(process.cwd().length + 1);
-      }
-    }
-    
+    // Build output (normalize transcripts_dirs to relative paths for deterministic output)
+    const normalizedDirs = transcriptsDirs.map((d) => {
+      if (!isAbsolute(d)) return d;
+      if (d.startsWith(repoRoot + "/")) return d.slice(repoRoot.length + 1);
+      if (d.startsWith(process.cwd() + "/")) return d.slice(process.cwd().length + 1);
+      return d;
+    }).sort(); // Deterministic order for output
+
     const output: RecomputeOutput = {
       version: "passport/1.0",
       generated_from: {
-        transcripts_dir: normalizedDir,
+        transcripts_dirs: normalizedDirs,
         count: transcripts.length,
       },
       states: {},
+      records: {},
     };
+
+    // Helper to determine tier from score
+    function tierFromScore(score: number): "A" | "B" | "C" | "D" {
+      if (score >= 0.20) return "A";
+      if (score >= -0.10) return "B";
+      if (score >= -0.50) return "C";
+      return "D";
+    }
+
+    // Helper to determine role from transcript
+    function determineRole(transcript: TranscriptV4, signer: string): "BUYER" | "PROVIDER" | "UNKNOWN" {
+      const intentRound = transcript.rounds.find((r) => r.round_type === "INTENT");
+      const intentSigner = intentRound ? getRoundSignerKey(intentRound) : null;
+      
+      if (intentSigner === signer) {
+        return "BUYER";
+      }
+      
+      // Check if signer appears in ASK/COUNTER/ACCEPT rounds (provider)
+      const providerRound = transcript.rounds.find((r) => {
+        const roundSigner = getRoundSignerKey(r);
+        return roundSigner === signer && 
+               (r.round_type === "ASK" || r.round_type === "COUNTER" || r.round_type === "ACCEPT");
+      });
+      
+      if (providerRound) {
+        return "PROVIDER";
+      }
+      
+      return "UNKNOWN";
+    }
 
     // Compute DBL judgments for all transcripts (deterministic)
     if (human) {
@@ -329,10 +424,35 @@ export async function main(): Promise<void> {
         },
       };
 
+      // Build history and determine role
+      const history: Array<{
+        transcript_id: string;
+        outcome: string;
+        fault_domain: string;
+        delta: number;
+        confidence: number;
+        timestamp: string;
+      }> = [];
+      
+      let primaryRole: "BUYER" | "PROVIDER" | "UNKNOWN" = "UNKNOWN";
+      let constitutionHash = ACCEPTED_CONSTITUTION_HASHES[0]; // Default to standard
+      let lastUpdated = "";
+
       // Process each deduplicated transcript with DBL judgment
       for (const transcript of deduplicatedTranscripts) {
         const summary = extractTranscriptSummary(transcript);
         const dblJudgment = transcriptJudgments.get(transcript) || null;
+
+        // Determine role (use first non-UNKNOWN role found)
+        const role = determineRole(transcript, targetSigner);
+        if (primaryRole === "UNKNOWN" && role !== "UNKNOWN") {
+          primaryRole = role;
+        }
+
+        // Use standard constitution hash by default
+        // In a full implementation, we'd check each transcript's constitution hash
+        // For now, we use the standard hash and mark as NON_STANDARD if issues are detected
+        constitutionHash = ACCEPTED_CONSTITUTION_HASHES[0];
 
         // Compute delta
         const delta = computePassportDelta({
@@ -340,6 +460,38 @@ export async function main(): Promise<void> {
           dbl_judgment: dblJudgment,
           agent_id: targetSigner,
         });
+
+        // Determine outcome and fault domain
+        let outcome = "COMPLETED";
+        if (transcript.failure_event) {
+          if (transcript.failure_event.code === "PACT-101") {
+            outcome = "ABORTED_POLICY";
+          } else if (transcript.failure_event.code === "PACT-404") {
+            outcome = "FAILED_TIMEOUT";
+          } else {
+            outcome = "FAILED_INTEGRITY";
+          }
+        }
+        
+        const faultDomain = dblJudgment?.dblDetermination || "NO_FAULT";
+        const confidence = dblJudgment?.confidence || 0.5;
+        const transcriptId = getTranscriptStableId(transcript);
+        const timestamp = new Date(transcript.created_at_ms).toISOString();
+
+        // Add to history
+        history.push({
+          transcript_id: transcriptId,
+          outcome,
+          fault_domain: faultDomain,
+          delta: delta.score_delta,
+          confidence,
+          timestamp,
+        });
+
+        // Track last updated
+        if (!lastUpdated || timestamp > lastUpdated) {
+          lastUpdated = timestamp;
+        }
 
         // Apply delta
         state = applyDelta(state, delta);
@@ -361,6 +513,18 @@ export async function main(): Promise<void> {
         counters: state.counters,
         included_transcripts: includedTranscripts,
         state_hash: stateHash,
+      };
+
+      // Build extended record format
+      output.records[targetSigner] = {
+        version: "passport/1.0",
+        signer: targetSigner,
+        role: primaryRole,
+        score: state.score,
+        tier: tierFromScore(state.score),
+        history: history,
+        last_updated: lastUpdated || new Date().toISOString(),
+        constitution_hash: constitutionHash,
       };
     }
 

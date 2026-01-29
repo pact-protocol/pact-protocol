@@ -60,6 +60,24 @@ Pact v4 is **coherent, closed, and internally complete**. All core components ar
 - Deterministic redaction (same input → same output)
 - Evidence bundle integration
 
+### Evidence Viewer & Verifier
+
+✅ **Evidence Viewer** (`apps/evidence-viewer`)
+- Copy Transcript ID (clipboard; truncated display with full ID on hover)
+- Export GC View as Legal PDF (multi-page, institutional aesthetic)
+- Export Insurer Summary PDF (underwriting-grade; NOT INSURABLE / NON-STANDARD banners)
+- Generate Claims Intake Package (ZIP: README, verify command, underwriting summary PDF, GC summary PDF, auditor pack, metadata)
+- Passport Panel (buyer/provider tiers and scores from insurer summary; non-standard constitution, low confidence, recent failure warnings)
+
+✅ **Verifier CLI** (`packages/verifier`, `bin/pact-verifier.mjs`)
+- `passport-v1-recompute` — Multi-source ready: accepts multiple `--transcripts-dir`, merge deterministically by transcript ID, warn on duplicate transcripts
+- `passport-v1-query` — Query local JSON registry by signer pubkey (`--signer`, optional `--registry`)
+
+✅ **Passport Registry Contract** (`docs/passport/PASSPORT_REGISTRY_CONTRACT.md`)
+- Immutable fields; deterministic score deltas; constitution hash governs interpretation; append-only via transcripts
+- Fault domain **INDETERMINATE_TAMPER**: integrity failure → no agent penalty; underwriter scrutiny (TAMPER_SCRUTINY, risk factor)
+- Explicit non-goals: not identity, not KYC, not revocation, not access control, not governance, not a token
+
 ## Test Coverage
 
 ✅ **703 tests passing** (4 skipped)
@@ -87,6 +105,9 @@ Pact v4 is **coherent, closed, and internally complete**. All core components ar
 | Evidence Bundles | ✅ Complete | ✅ | ✅ |
 | Transcript Replayer | ✅ Complete | ✅ | ✅ |
 | Redaction | ✅ Complete | ✅ | ✅ |
+| Evidence Viewer (PDF export, Claims Package, Passport Panel) | ✅ Complete | ✅ | ✅ |
+| Verifier (passport-v1-recompute multi-source, passport-v1-query) | ✅ Complete | ✅ | ✅ |
+| Passport Registry Contract (INDETERMINATE_TAMPER, non-goals) | ✅ Complete | — | ✅ |
 
 ## What This Means
 
