@@ -64,3 +64,7 @@ packages/passport/src/__tests__/storage-fallback.test.ts
 
 # local artifacts
 /test-transcripts/
+
+# local drafts
+/docs/MERKLE_DIGEST_v1.md
+/docs/PATCH_PLAN_MERKLE_REMOVAL_v4.0.5-rc1.md
