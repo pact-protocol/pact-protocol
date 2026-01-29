@@ -148,8 +148,8 @@ describe("Insurer Summary CLI", () => {
         expect(output.risk_factors).toContain("PROVIDER_UNREACHABLE");
         expect(output.risk_factors).toContain("PROVIDER_FAULT");
         expect(output.surcharges).toContain("PROVIDER_OPS");
-        // PACT-420 fixture has invalid integrity → EXCLUDED
-        expect(output.coverage).toBe("EXCLUDED");
+        // PACT-420 fixture has valid integrity → COVERED_WITH_SURCHARGE (provider at fault)
+        expect(output.coverage).toBe("COVERED_WITH_SURCHARGE");
       } finally {
         if (existsSync(tempDir)) {
           rmSync(tempDir, { recursive: true, force: true });

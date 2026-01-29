@@ -4,7 +4,7 @@
  * Deterministic reputation scoring for Pact agents.
  */
 
-import type { PassportEvent, PassportScore } from "./types";
+import type { PassportEvent } from "./types";
 import type { PassportStorage } from "./storage";
 
 export type ScoreBreakdown = {
@@ -198,7 +198,7 @@ export function computePassportScore(
   // Separate events by type to check bootstrap conditions
   const hasSuccess = events.some((e) => e.event_type === "settlement_success");
   const hasFailure = events.some((e) => e.event_type === "settlement_failure");
-  const hasDispute = events.some((e) => e.event_type === "dispute_resolved");
+  const _hasDispute = events.some((e) => e.event_type === "dispute_resolved");
 
   // Bootstrap: insufficient data - require at least 3 events OR at least 1 success + 1 failure
   // Allow 2 events if they're different types (success + failure) so scoring can happen
@@ -392,7 +392,7 @@ export function computePassportScore(
   // Compute component scores
   // Use success/failure weighted sum for success/failure score calculation (disputes calculated separately)
   const successFailureWeighted = weightedSuccesses + weightedFailures;
-  const totalWeighted = weightedSuccesses + weightedFailures + weightedDisputesWins + weightedDisputesLosses + weightedDisputesDismissals;
+  const _totalWeighted = weightedSuccesses + weightedFailures + weightedDisputesWins + weightedDisputesLosses + weightedDisputesDismissals;
 
   const successScore = successFailureWeighted > 0 ? (100 * weightedSuccesses) / successFailureWeighted : 50;
   // failureScore: 0 = all failures, 100 = no failures

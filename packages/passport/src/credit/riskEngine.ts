@@ -113,7 +113,7 @@ function checkKillSwitch(
   }
 
   // Check for excessive PACT-4xx failures (settlement failures)
-  const recentSettlementFailures = storage.getRecentFailures(
+  const _recentSettlementFailures = storage.getRecentFailures(
     agentId,
     SETTLEMENT_FAILURE_WINDOW_MS,
     "PACT-4%"
@@ -144,7 +144,7 @@ function checkKillSwitch(
 function checkDisputeLosses(
   agentId: string,
   storage: PassportStorage,
-  asOf: number
+  _asOf: number
 ): { downgrade?: boolean; reason?: string } {
   // Check for dispute losses (agent at fault)
   // Note: We need to determine if agent is buyer or seller from dispute outcome

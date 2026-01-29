@@ -255,6 +255,7 @@ export function narratePassportDenial(policyResult: PassportPolicyResult): strin
   let narrative = "Passport policy gate denied: ";
 
   // Handle backward compatibility: "LOW_SCORE" maps to "SCORE_TOO_LOW"
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (reason === "SCORE_TOO_LOW" || reason === ("LOW_SCORE" as any)) {
     narrative += `Agent score ${score.toFixed(1)} is below required minimum ${minScore}.`;
   } else {

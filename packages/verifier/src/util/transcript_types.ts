@@ -70,6 +70,9 @@ export type TranscriptV4 = {
     contention_key?: string;
     contention_scope?: "EXCLUSIVE" | "NON_EXCLUSIVE";
     contention_window_ms?: number;
+    /** Audit tier (informational only; default T1). */
+    audit_tier?: "T1" | "T2" | "T3";
+    audit_sla?: string;
   };
 };
 

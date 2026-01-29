@@ -238,6 +238,12 @@ export interface GCView {
       evidence_refs: string[];
     }>;
   };
+  /** Optional audit tier metadata (informational only; default T1). Does not affect verification. */
+  audit?: {
+    tier: "T1" | "T2" | "T3";
+    sla?: string;
+    note: string;
+  };
   responsibility: {
     dbl_version: "dbl/2.0";
     judgment: {
@@ -1123,6 +1129,15 @@ export async function renderGCView(
       passport_state_hashes: extractPassportStateHashes(transcript),
       policy_failures: policyFailures,
     },
+    ...(transcript.metadata?.audit_tier != null || transcript.metadata?.audit_sla != null
+      ? {
+          audit: {
+            tier: (transcript.metadata?.audit_tier as "T1" | "T2" | "T3") ?? "T1",
+            sla: transcript.metadata?.audit_sla as string | undefined,
+            note: "Tier affects audit schedule, not transaction admissibility.",
+          },
+        }
+      : {}),
     responsibility: {
       dbl_version: "dbl/2.0",
       judgment: {

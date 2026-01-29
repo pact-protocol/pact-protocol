@@ -5,7 +5,7 @@
  * Pure and deterministic: no Date.now, no randomness, no network, no FS.
  */
 
-import type { PassportInputs, PassportDelta, TranscriptSummary, JudgmentArtifact } from "./types";
+import type { PassportInputs, PassportDelta } from "./types";
 
 /**
  * Compute passport delta from inputs.

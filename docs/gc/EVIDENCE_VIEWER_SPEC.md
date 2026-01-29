@@ -58,8 +58,11 @@ auditor_pack.zip
   - `constitution_hash` (string, first 16 chars + "...")
   - `created_at_ms` (number, ISO 8601 format)
   - `tool_version` (string)
+  - `audit_tier` (optional, "T1" | "T2" | "T3") → Informational only; see [TIERED_VERIFICATION_NOTE.md](./TIERED_VERIFICATION_NOTE.md)
+  - `audit_sla` (optional, string) → Informational only
 - **Source:** `derived/gc_view.json`
   - `executive_summary.status` (string) → Display as case status badge
+  - `audit` (optional) → `tier`, `sla`, `note` (tier affects audit schedule, not admissibility)
 - **Source:** `pact-verifier auditor-pack-verify` output
   - `ok` (boolean) → Verification status badge
   - `checksums_ok` (boolean)
@@ -112,6 +115,7 @@ auditor_pack.zip
   - `derived/gc_view.json`
   - `derived/judgment.json`
   - `derived/insurer_summary.json`
+  - `derived/merkle_digest.json` (future; doc-only in v4.0.5-rc1 — see [MERKLE_DIGEST_v1.md](../MERKLE_DIGEST_v1.md); viewer may display if present for forward compatibility)
   - `constitution/CONSTITUTION_v1.md`
   - `checksums.sha256`
   - `manifest.json`
@@ -166,6 +170,7 @@ auditor_pack.zip
 - **Recompute Verification:** `recompute_ok` from verify output (badge)
 - **Notes:** `integrity.notes` (bulleted list, if present)
 - **Mismatches:** `mismatches` from verify output (if `recompute_ok=false`, show as warnings)
+- **Merkle digest (when present, future):** Date (UTC), root (truncated), leaf index, constitution hash (truncated), signer (truncated when present) — not emitted by verifier in v4.0.5-rc1; see [MERKLE_DIGEST_v1.md](../MERKLE_DIGEST_v1.md)
 
 **Design:** Status indicators with color coding. Expandable section for notes/mismatches.
 
@@ -287,6 +292,9 @@ auditor_pack.zip
   - `gc_view.json`: `version: "gc_view/1.0"`
   - `judgment.json`: `version: "dbl/2.0"`
   - `insurer_summary.json`: `version: "insurer_summary/1.0"`
+
+### Bundle and loading
+- **Lazy-loaded heavy libraries:** PDF (jsPDF) and ZIP (JSZip) libraries are loaded on demand when the user first exports a PDF, generates the claims package, or loads/downloads from a pack. This keeps the initial bundle smaller and improves first-load performance. Export and download actions may show a brief loading state while the chunk loads; failures to load (e.g. network) should be surfaced to the user.
 
 ### Verification Integration
 - Viewer must have `pact-verifier` CLI available in PATH

@@ -16,8 +16,8 @@
   "scripts": {
     "build": "pnpm exec tsup --config tsup.config.ts",
     "postbuild": "cp src/policy/schema.json dist/schema.json",
-    "test": "pnpm -w exec vitest run -r packages/sdk",
-    "test:watch": "pnpm -w exec vitest -r packages/sdk",
+    "test": "pnpm exec vitest run",
+    "test:watch": "pnpm exec vitest",
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {

@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { TranscriptV4 } from "../../../sdk/src/transcript/v4/replay";
 import { recomputeFromTranscripts, getTranscriptStableId } from "../recompute";
-import { getTranscriptSigners, getRoundSignerKey } from "../identity";
+import { getTranscriptSigners } from "../identity";
 
 /**
  * Load a fixture file

@@ -6,7 +6,7 @@
 
 import http from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { queryPassport, requirePassport, type PassportQueryResponse } from "./query";
+import { queryPassport } from "./query";
 import type { PassportStorage } from "./storage";
 
 export interface PassportServerOptions {
@@ -46,7 +46,7 @@ export function startPassportServer(opts: PassportServerOptions): Promise<Passpo
     }
 
     // GET /passport/:agent_id
-    const match = req.url?.match(/^\/passport\/([^\/]+)$/);
+    const match = req.url?.match(/^\/passport\/([^/]+)$/);
     if (req.method === "GET" && match && req.url) {
       const agentId = match[1];
       const host = req.headers.host || "localhost";
@@ -66,9 +66,10 @@ export function startPassportServer(opts: PassportServerOptions): Promise<Passpo
         const result = queryPassport(storage, agentId, asOf);
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify(result));
-      } catch (error: any) {
+      } catch (error: unknown) {
         res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: error.message || "Internal server error" }));
+        const msg = error instanceof Error ? error.message : "Internal server error";
+        res.end(JSON.stringify({ error: msg }));
       }
       return;
     }

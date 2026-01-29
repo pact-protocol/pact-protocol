@@ -59,6 +59,9 @@ interface InsurerSummary {
   surcharges: string[];
   coverage: CoverageDecision;
   constitution_warning?: string;
+  /** Audit tier (informational only; default T1). Does not affect verification. */
+  audit_tier?: "T1" | "T2" | "T3";
+  audit_sla?: string;
 }
 
 // ============================================================================
@@ -526,6 +529,11 @@ export async function main(): Promise<void> {
   
   // Compute risk factors and surcharges
   const riskFactors = computeRiskFactors(outcome, faultDomain, hasDoubleCommit, integrityValid);
+
+  // Informational audit tier (only when present in transcript; does not affect verification)
+  const auditTier = transcript.metadata?.audit_tier as "T1" | "T2" | "T3" | undefined;
+  if (auditTier === "T2") riskFactors.push("TIER_T2");
+  if (auditTier === "T3") riskFactors.push("TIER_T3");
   
   // Handle constitution verification
   let constitutionWarning: string | undefined;
@@ -568,6 +576,8 @@ export async function main(): Promise<void> {
     surcharges,
     coverage,
   };
+  if (auditTier != null) output.audit_tier = auditTier;
+  if (transcript.metadata?.audit_sla != null) output.audit_sla = transcript.metadata.audit_sla as string;
   
   // Add constitution warning if present
   if (constitutionWarning) {

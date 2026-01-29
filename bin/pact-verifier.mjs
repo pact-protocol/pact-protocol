@@ -31,11 +31,25 @@ const subcommands = {
   "passport-v1-recompute": join(verifierDist, "passport_v1_recompute.js"),
   "passport-v1-query": join(verifierDist, "passport_v1_query.js"),
   "contention-scan": join(verifierDist, "contention_scan.js"),
+  "version": null, // handled below
 };
 
 const subcommand = process.argv[2];
 
-if (!subcommand || !subcommands[subcommand]) {
+// Version: subcommand "version" or --version / -v (argv[2] when invoked as pact-verifier --version)
+if (subcommand === "version" || subcommand === "--version" || subcommand === "-v") {
+  const pkgPath = join(repoRoot, "packages", "verifier", "package.json");
+  try {
+    const { readFileSync } = await import("node:fs");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+    console.log(pkg.version ?? "0.2.1");
+  } catch {
+    console.log("0.2.1");
+  }
+  process.exit(0);
+}
+
+if (!subcommand || !(subcommand in subcommands)) {
   console.error(`Usage: ${process.argv[1]} <subcommand> [args...]`);
   console.error("");
   console.error("Available subcommands:");
@@ -46,6 +60,10 @@ if (!subcommand || !subcommands[subcommand]) {
 }
 
 const scriptPath = subcommands[subcommand];
+if (!scriptPath) {
+  console.error(`Error: Subcommand "${subcommand}" is not runnable from this entrypoint.`);
+  process.exit(1);
+}
 const args = process.argv.slice(3);
 
 if (!existsSync(scriptPath)) {

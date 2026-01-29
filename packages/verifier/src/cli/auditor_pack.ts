@@ -34,7 +34,7 @@ const __dirname = dirname(__filename);
 
 // Version constants
 const PACKAGE_VERSION = "auditor_pack/1.0";
-const VERIFIER_VERSION = "0.2.0"; // Should match package.json
+const VERIFIER_VERSION = "0.2.1"; // Should match package.json
 
 // EPIPE handler for pipe safety
 process.stdout.on("error", (err: NodeJS.ErrnoException) => {
@@ -200,6 +200,10 @@ async function generateInsurerSummary(
   if (confidence < 0.7) {
     surcharges.push("LOW_CONFIDENCE");
   }
+  // Informational audit tier (only when present in transcript; does not affect verification)
+  const auditTier = transcript.metadata?.audit_tier as "T1" | "T2" | "T3" | undefined;
+  if (auditTier === "T2") riskFactors.push("TIER_T2");
+  if (auditTier === "T3") riskFactors.push("TIER_T3");
 
   const buyerTier = tierFromPassport(buyerScore);
   const providerTier = tierFromPassport(providerScore);
@@ -213,7 +217,7 @@ async function generateInsurerSummary(
     coverage = "COVERED_WITH_SURCHARGE";
   }
 
-  return {
+  const result: Record<string, unknown> = {
     version: "insurer_summary/1.0",
     constitution_hash: gcView.constitution.hash.substring(0, 16) + "...",
     integrity: gcView.integrity.hash_chain === "VALID" ? "VALID" : "INVALID",
@@ -234,6 +238,9 @@ async function generateInsurerSummary(
     surcharges,
     coverage,
   };
+  if (auditTier != null) result.audit_tier = auditTier;
+  if (transcript.metadata?.audit_sla != null) result.audit_sla = transcript.metadata.audit_sla;
+  return result;
 }
 
 /**
@@ -495,8 +502,8 @@ export async function main(): Promise<void> {
     if (contentionReport) includedArtifacts.push("derived/contention_report.json");
     includedArtifacts.push("README.txt");
 
-    // Build manifest
-    const manifest = {
+    // Build manifest (audit_tier/audit_sla only when present in transcript metadata; backward compatible)
+    const manifest: Record<string, unknown> = {
       package_version: PACKAGE_VERSION,
       created_at_ms: Date.now(),
       constitution_version: constitution.version,
@@ -518,6 +525,8 @@ export async function main(): Promise<void> {
         confidence: judgment.confidence,
       },
     };
+    if (transcript.metadata?.audit_tier != null) manifest.audit_tier = (transcript.metadata.audit_tier as string) ?? "T1";
+    if (transcript.metadata?.audit_sla != null) manifest.audit_sla = transcript.metadata.audit_sla;
 
     // Create ZIP
     const zip = new JSZip();

@@ -6,7 +6,7 @@
  */
 
 import type { TranscriptV4, PassportState } from "./types";
-import { getTranscriptSigners, getRoundSignerKey } from "./identity";
+import { getTranscriptSigners } from "./identity";
 import { extractTranscriptSummary } from "./summary";
 import { computePassportDelta } from "./compute";
 import { applyDelta } from "./apply";

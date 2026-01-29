@@ -29,6 +29,9 @@ export type TranscriptV4 = {
     contention_key?: string; // hash(intent_type, resource_id, scope, time_window)
     contention_scope?: "EXCLUSIVE" | "NON_EXCLUSIVE";
     contention_window_ms?: number; // Claim window for exclusivity
+    // Optional audit tier (informational only; default T1)
+    audit_tier?: "T1" | "T2" | "T3";
+    audit_sla?: string;
   };
 };
 

@@ -58,3 +58,9 @@ packages/passport/src/__tests__/storage-fallback.test.ts
 * 2.mjs
 * 2.cjs
 
+
+# local artifacts
+/test-transcripts/
+
+# local artifacts
+/test-transcripts/

@@ -1,6 +1,6 @@
 {
   "name": "@pact/verifier",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Pact v4 Transcript Verifier and Default Blame Logic - Standalone CLI",
   "private": false,
   "type": "module",

@@ -6,7 +6,6 @@
 
 import type { PassportStorage } from "./storage";
 import { computePassportScore, type ScoreResult, type ScoreBreakdown } from "./scoring";
-import type { PassportScore } from "./types";
 
 export type PassportQueryResponse = {
   agent_id: string;
@@ -228,8 +227,8 @@ export function requirePassport(
   const recentPolicyViolation = queryResult.breakdown.factors.negative.find(
     (f) => f.factor.includes("PACT-1") || f.factor.toLowerCase().includes("policy")
   );
-  const recentViolationWindow = 30 * 24 * 60 * 60 * 1000; // 30 days
-  const now = asOf || Date.now();
+  const _recentViolationWindow = 30 * 24 * 60 * 60 * 1000; // 30 days
+  const _now = asOf || Date.now();
   // If there's a recent policy violation mentioned in factors, check recency
   // This is heuristic-based - in production, would check actual event timestamps
   if (recentPolicyViolation && queryResult.score < 60) {

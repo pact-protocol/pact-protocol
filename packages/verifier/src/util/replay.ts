@@ -34,8 +34,10 @@ function computeRoundHash(round: TranscriptRound): string {
 
 /**
  * Compute transcript hash (excluding final_hash field itself).
+ * Canonical content hash; same semantics as SDK replay computeTranscriptHash.
+ * Exported for Merkle digest (content-derived leaves) and other integrity use.
  */
-function computeTranscriptHash(transcript: TranscriptV4): string {
+export function computeTranscriptHash(transcript: TranscriptV4): string {
   const { final_hash, ...transcriptWithoutHash } = transcript;
   const canonical = stableCanonicalize(transcriptWithoutHash);
   return sha256(canonical);

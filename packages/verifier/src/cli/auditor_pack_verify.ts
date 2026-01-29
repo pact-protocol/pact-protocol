@@ -12,6 +12,7 @@ import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync } from "no
 import { resolve, isAbsolute, join } from "node:path";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
 import { renderGCView } from "../gc_view/renderer.js";
 import { resolveBlameV1 } from "../dbl/blame_resolver_v1.js";
@@ -21,7 +22,7 @@ import { isAcceptedConstitutionHash, getAcceptedConstitutionHashes } from "../ut
 
 // Version constants
 const PACKAGE_VERSION = "auditor_pack_verify/1.0";
-const VERIFIER_VERSION = "0.2.0";
+const VERIFIER_VERSION = "0.2.1";
 
 // EPIPE handler for pipe safety
 process.stdout.on("error", (err: NodeJS.ErrnoException) => {
@@ -212,9 +213,10 @@ const REQUIRED_FILES = [
 ];
 
 /**
- * Generate insurer summary (simplified inline version - same as auditor_pack.ts)
+ * Generate insurer summary (simplified inline version - same as auditor_pack.ts).
+ * Exported for freeze protection tests.
  */
-async function generateInsurerSummary(
+export async function generateInsurerSummary(
   transcript: TranscriptV4,
   gcView: Awaited<ReturnType<typeof renderGCView>>,
   judgment: Awaited<ReturnType<typeof resolveBlameV1>>
@@ -281,6 +283,9 @@ async function generateInsurerSummary(
   if (confidence < 0.7) {
     surcharges.push("LOW_CONFIDENCE");
   }
+  const auditTier = transcript.metadata?.audit_tier as "T1" | "T2" | "T3" | undefined;
+  if (auditTier === "T2") riskFactors.push("TIER_T2");
+  if (auditTier === "T3") riskFactors.push("TIER_T3");
 
   const buyerTier = tierFromPassport(buyerScore);
   const providerTier = tierFromPassport(providerScore);
@@ -294,7 +299,7 @@ async function generateInsurerSummary(
     coverage = "COVERED_WITH_SURCHARGE";
   }
 
-  return {
+  const result: Record<string, unknown> = {
     version: "insurer_summary/1.0",
     constitution_hash: gcView.constitution.hash.substring(0, 16) + "...",
     integrity: gcView.integrity.hash_chain === "VALID" ? "VALID" : "INVALID",
@@ -315,6 +320,9 @@ async function generateInsurerSummary(
     surcharges,
     coverage,
   };
+  if (auditTier != null) result.audit_tier = auditTier;
+  if (transcript.metadata?.audit_sla != null) result.audit_sla = transcript.metadata.audit_sla;
+  return result;
 }
 
 /**
@@ -583,6 +591,8 @@ export async function main(): Promise<void> {
       recomputeMismatches.push(`derived/insurer_summary.json mismatch after canonicalization (recomputed: ${recomputedInsurerSummaryHash.substring(0, 16)}..., original: ${originalInsurerSummaryHash.substring(0, 16)}...)`);
     }
 
+    // derived/merkle_digest.json is not verified in v4.0.5-rc1 (doc-only future spec). If present in pack, it is ignored.
+
     report.recompute_ok = recomputeMismatches.length === 0;
     if (!report.recompute_ok) {
       report.mismatches.push(...recomputeMismatches);
@@ -630,4 +640,12 @@ function outputReport(report: VerifyReport, outPath?: string): void {
   }
 }
 
-main();
+const isMainModule =
+  typeof process !== "undefined" &&
+  process.argv[1] &&
+  (process.argv[1] === fileURLToPath(import.meta.url) ||
+    process.argv[1].endsWith("auditor_pack_verify.js") ||
+    process.argv[1].endsWith("auditor_pack_verify.ts"));
+if (isMainModule) {
+  main();
+}

@@ -23,6 +23,8 @@ process.stdout.on("error", (err: NodeJS.ErrnoException) => {
 
 const subcommand = process.argv[2];
 
+const PACKAGE_VERSION = "0.2.1";
+
 const subcommands: Record<string, () => Promise<void>> = {
   "auditor-pack": async () => {
     const { main } = await import("../cli/auditor_pack.js");
@@ -56,6 +58,9 @@ const subcommands: Record<string, () => Promise<void>> = {
     // contention_scan uses IIFE pattern, import will execute it
     await import("../cli/contention_scan.js");
   },
+  "version": async () => {
+    console.log(PACKAGE_VERSION);
+  },
 };
 
 function printUsage(): void {
@@ -75,12 +80,17 @@ function printUsage(): void {
   console.error("  pact-verifier contention-scan --transcripts-dir ./transcripts");
   console.error("  pact-verifier auditor-pack --transcript transcript.json --out evidence.zip");
   console.error("  pact-verifier auditor-pack-verify --zip evidence.zip");
+  console.error("  pact-verifier version");
 }
 
 async function main(): Promise<void> {
   if (!subcommand || subcommand === "-h" || subcommand === "--help") {
     printUsage();
     process.exit(subcommand ? 0 : 1);
+  }
+  if (subcommand === "--version" || subcommand === "-v") {
+    console.log(PACKAGE_VERSION);
+    process.exit(0);
   }
 
   const handler = subcommands[subcommand];

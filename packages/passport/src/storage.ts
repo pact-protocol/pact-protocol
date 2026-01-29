@@ -9,6 +9,7 @@ import type { PassportEvent, PassportScore } from "./types";
 import { MemoryPassportStorage } from "./storage-memory";
 
 export class PassportStorage {
+  /* eslint-disable @typescript-eslint/no-explicit-any */
   private db: any | null = null;
   private memoryStorage: MemoryPassportStorage | null = null;
   private useMemory: boolean;
@@ -27,6 +28,7 @@ export class PassportStorage {
       this.useMemory = true;
     }
   }
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   /**
    * Create a PassportStorage instance (async factory for ESM dynamic import).
@@ -34,6 +36,7 @@ export class PassportStorage {
    */
   static async create(dbPath: string): Promise<PassportStorage> {
     // Try to load better-sqlite3 using dynamic import (ESM compatible)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let Database: any | null = null;
     try {
       // @ts-expect-error - better-sqlite3 is an optional peer dependency, not available at build time
