@@ -15,8 +15,8 @@
   "scripts": {
     "build": "pnpm run clean && pnpm run build:cli && pnpm run build:bin",
     "clean": "rm -rf dist",
-    "build:cli": "pnpm exec tsup src/cli/passport_v1_recompute.ts src/cli/judge_v4.ts src/cli/gc_view.ts src/cli/gc_summary.ts src/cli/insurer_summary.ts src/cli/contention_scan.ts src/cli/auditor_pack.ts src/cli/auditor_pack_verify.ts --format esm --outDir dist/cli --tsconfig tsconfig.json --silent --clean",
-    "build:bin": "pnpm exec tsup src/bin/pact-verifier.ts --format esm --outDir dist/bin --tsconfig tsconfig.json --silent --clean",
+    "build:cli": "node ../../node_modules/tsup/dist/cli-default.js src/cli/passport_v1_recompute.ts src/cli/judge_v4.ts src/cli/gc_view.ts src/cli/gc_summary.ts src/cli/insurer_summary.ts src/cli/contention_scan.ts src/cli/auditor_pack.ts src/cli/auditor_pack_verify.ts --format esm --outDir dist/cli --tsconfig tsconfig.json --silent --clean",
+    "build:bin": "node ../../node_modules/tsup/dist/cli-default.js src/bin/pact-verifier.ts --format esm --outDir dist/bin --tsconfig tsconfig.json --silent --clean",
     "pack": "npm pack",
     "smoke": "bash scripts/smoke_fresh_install.sh",
     "judge": "pnpm exec tsx src/cli/judge_v4.ts",
@@ -33,8 +33,8 @@
     "replay:verify:raw": "node dist/cli/replay_verify.js",
     "contention:scan": "pnpm run build >&2 && node dist/cli/contention_scan.js",
     "contention:scan:raw": "node dist/cli/contention_scan.js",
-    "test": "pnpm -w exec vitest run -r packages/verifier",
-    "test:watch": "pnpm -w exec vitest -r packages/verifier"
+    "test": "pnpm run build && node ../../node_modules/vitest/vitest.mjs run",
+    "test:watch": "node ../../node_modules/vitest/vitest.mjs watch"
   },
   "dependencies": {
     "bs58": "^5.0.0",

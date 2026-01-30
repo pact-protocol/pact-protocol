@@ -17,8 +17,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "pnpm exec tsup",
-    "test": "pnpm -w exec vitest run -r packages/provider-adapter",
+    "build": "node ../../node_modules/tsup/dist/cli-default.js",
+    "test": "node ../../node_modules/vitest/vitest.mjs run",
     "start": "tsx src/server.ts",
     "registry:register": "tsx src/cli.ts register",
     "registry:list": "tsx src/cli.ts list"

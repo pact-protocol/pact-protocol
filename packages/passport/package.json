@@ -14,10 +14,10 @@
   },
   "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
-    "build": "pnpm exec tsup src/index.ts --format esm --dts --clean --tsconfig tsconfig.build.json",
-    "test": "pnpm exec vitest run",
-    "test:watch": "pnpm exec vitest watch",
-    "passport:v1:test": "pnpm exec vitest run src/v1/__tests__/passport_v1.test.ts",
+    "build": "node ../../node_modules/tsup/dist/cli-default.js src/index.ts --format esm --dts --clean --tsconfig tsconfig.build.json",
+    "test": "node ../../node_modules/vitest/vitest.mjs run",
+    "test:watch": "node ../../node_modules/vitest/vitest.mjs watch",
+    "passport:v1:test": "node ../../node_modules/vitest/vitest.mjs run src/v1/__tests__/passport_v1.test.ts",
     "lint": "eslint src --ext .ts"
   },
   "devDependencies": {

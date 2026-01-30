@@ -14,10 +14,10 @@
   },
   "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
-    "build": "pnpm exec tsup --config tsup.config.ts",
+    "build": "node ../../node_modules/tsup/dist/cli-default.js --config tsup.config.ts",
     "postbuild": "cp src/policy/schema.json dist/schema.json",
-    "test": "pnpm exec vitest run",
-    "test:watch": "pnpm exec vitest",
+    "test": "node ../../node_modules/vitest/vitest.mjs run",
+    "test:watch": "node ../../node_modules/vitest/vitest.mjs watch",
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {

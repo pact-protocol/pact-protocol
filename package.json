@@ -4,7 +4,7 @@
   "private": true,
   "description": "Pact agent negotiation protocol monorepo",
   "scripts": {
-    "build": "pnpm -C packages/passport build && pnpm -C packages/sdk build && pnpm -C packages/provider-adapter build",
+    "build": "pnpm -C packages/passport build && pnpm -C packages/sdk build && pnpm -C packages/provider-adapter build && pnpm -C packages/verifier build",
     "build:sdk": "pnpm --filter @pact/sdk build",
     "build:verifier": "pnpm -w exec tsc -p packages/verifier/tsconfig.json",
     "test": "pnpm -r test",
