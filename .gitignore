@@ -1,0 +1,73 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+*.tsbuildinfo
+coverage/
+
+# Local artifacts
+.pact/
+demo/h5-golden/**/auditor_pack_*.zip
+demo/h5-golden/**/*_MESSAGE.txt
+demo/h5-golden/tamper/.tamper_workdir/
+packages/demo/.pact/
+packages/demo/demo_receipts_*.jsonl
+evidence-bundle/
+
+# Local clone folders
+pact_/
+
+# Backup and temp files
+*.backup
+*.tmp
+
+# Package tarballs (built artifacts)
+*.tgz
+
+# Provider registry (keep root one, exclude duplicates)
+packages/provider-adapter/providers.jsonl
+
+# Local binaries (if accidentally committed)
+/pnpm
+/tsx
+/vitest
+node
+
+# IDE and editor files
+.cursor/
+
+# Provider keypair files (contains secrets)
+keypair.json
+*.keypair.json
+*_keypair.json
+
+
+# local/WIP artifacts
+packages/sdk/src/blame/
+packages/sdk/src/transcript/v4/__tests__/contention.test.ts
+packages/passport/src/__tests__/storage-fallback.test.ts
+
+# macOS / editor duplicate filenames (accidental copies)
+* 2.ts
+* 2.md
+* 2.json
+* 2.yml
+* 2.yaml
+* 2.txt
+* 2.mjs
+* 2.cjs
+
+
+# local artifacts
+/test-transcripts/
+
+# local artifacts
+/test-transcripts/
+
+# local drafts
+/docs/MERKLE_DIGEST_v1.md
+/docs/PATCH_PLAN_MERKLE_REMOVAL_v4.0.5-rc1.md
+
+# local drafts
+/docs/MERKLE_DIGEST_v1.md
+/docs/PATCH_PLAN_MERKLE_REMOVAL_v4.0.5-rc1.md
