@@ -1,0 +1,30 @@
+{
+  "name": "@pact/passport",
+  "version": "0.1.0",
+  "description": "Pact Passport - Agent reputation and credit scoring system",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "node ../../node_modules/tsup/dist/cli-default.js src/index.ts --format esm --dts --clean --tsconfig tsconfig.build.json",
+    "test": "node ../../node_modules/vitest/vitest.mjs run",
+    "test:watch": "node ../../node_modules/vitest/vitest.mjs watch",
+    "passport:v1:test": "node ../../node_modules/vitest/vitest.mjs run src/v1/__tests__/passport_v1.test.ts",
+    "lint": "eslint src --ext .ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "tsup": "^8.5.1",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.6.1"
+  } 
+}

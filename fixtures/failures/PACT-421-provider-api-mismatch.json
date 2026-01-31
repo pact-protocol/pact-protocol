@@ -1,0 +1,46 @@
+{
+  "transcript_version": "pact-transcript/4.0",
+  "transcript_id": "transcript-36665455803f51892b3e778b66520d067dc3d21c2baec4b9edb71c3ca556f5c1",
+  "intent_id": "intent-pact421-test",
+  "intent_type": "weather.data",
+  "created_at_ms": 1000000000000,
+  "policy_hash": "aaa049f74895f24ca7f38f3db5e11b2d702452c0207c4459d179b8dc8833628d",
+  "strategy_hash": "bfdff987de461bf22ae33537307038b70af9440a9e5f3c7f6e7607239f58224c",
+  "identity_snapshot_hash": "f4edf4b37099e97dd380c24c37496de32c341406c2901bd830d2e35386ca1c37",
+  "rounds": [
+    {
+      "round_number": 0,
+      "round_type": "INTENT",
+      "message_hash": "3b1a032614b3d6b6d7a1740ca6df36e0fdcb99e8dd5d01d2c3b9a8bc0852321d",
+      "envelope_hash": "3b1a032614b3d6b6d7a1740ca6df36e0fdcb99e8dd5d01d2c3b9a8bc0852321d",
+      "signature": {
+        "signer_public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+        "signature_b58": "65PbXKNNih4Rn6cJGd8b8ii48tobJQC1ZAwgiQ5X8mzjEnikzjNbAHCd48cini2UjCi3hWeGB4nEp54CcRD5mhZ3",
+        "signed_at_ms": 1000000000000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1000000000000,
+      "previous_round_hash": "2660d7dd851fcd0fef5ad5a1232bdc87486dcdac4196889fede1d77218bfe12e",
+      "agent_id": "buyer",
+      "public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+      "content_summary": {
+        "intent_type": "weather.data"
+      },
+      "round_hash": "9549b6fb3a9d3f7779fdd6076d080e3aa55c2ff3e241d52efcebcd85a1134286"
+    }
+  ],
+  "failure_event": {
+    "code": "PACT-421",
+    "stage": "negotiation",
+    "fault_domain": "PROVIDER_AT_FAULT",
+    "terminality": "terminal",
+    "evidence_refs": [
+      "transcript-36665455803f51892b3e778b66520d067dc3d21c2baec4b9edb71c3ca556f5c1",
+      "9549b6fb3a9d3f7779fdd6076d080e3aa55c2ff3e241d52efcebcd85a1134286",
+      "abort_reason:Provider API mismatch - /pact endpoint not found: 404 Not Found"
+    ],
+    "timestamp": 1000000001000,
+    "transcript_hash": "d6ad9f872f103d72beae62111ce186950f7700a8764dd0634faa1f97d0fe95e1"
+  },
+  "final_hash": "cf0692494de616be6ea69053ab476fc5cc13d05b0e63043c704db0aaccffc298"
+}
