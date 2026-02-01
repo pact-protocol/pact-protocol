@@ -11,6 +11,13 @@
 Buyer Agent → negotiate → Provider → settle → transcript
 ```
 
+## Official Artifacts (Don)
+
+- [Don](don/) — Packaging, proof, and presentation index
+- [Design Partner Kit](design_partner_bundle/) — Canonical kit for auditors and partners
+- [Evidence Viewer v0](apps/evidence-viewer/) — Read-only evidence viewer (0.1.x)
+- [Constitution v1](don/constitution/PACT_CONSTITUTION_V1.md) — Pact Constitution
+
 ## For Executives
 
 Pact is **institution-grade autonomous commerce infrastructure**. It ensures that any AI agent authorized to spend money does so within a deterministic policy boundary, producing cryptographically verifiable records that explain what happened, why it happened, and who is responsible. 
