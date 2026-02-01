@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react';
 import FileUpload from './components/FileUpload';
+import DemoPackLoader from './components/DemoPackLoader';
 import DemoMode from './components/DemoMode';
 import ReadOnlyBanner from './components/ReadOnlyBanner';
 import PackStatusChip from './components/PackStatusChip';
+import VerdictHeader from './components/VerdictHeader';
 import CaseHeader from './components/CaseHeader';
 import OutcomePanel from './components/OutcomePanel';
+import RoundsTimeline from './components/RoundsTimeline';
 import IntegrityPanel from './components/IntegrityPanel';
+import WarningsAndExceptionsPanel from './components/WarningsAndExceptionsPanel';
 import ResponsibilityPanel from './components/ResponsibilityPanel';
 import InsurancePanel from './components/InsurancePanel';
 import PassportPanel from './components/PassportPanel';
@@ -24,12 +28,13 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
 
-  const handleFileSelect = async (file: File) => {
+  const handleFileSelect = async (file: File, verifyPath?: string) => {
     setIsLoading(true);
     setError(null);
     try {
       const data = await loadPackFromFile(file);
-      setPackData(data);
+      // Demo packs: show packs/<file>.zip; dragged file: show filename
+      setPackData(verifyPath != null ? { ...data, packVerifyPath: verifyPath } : data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to parse auditor pack');
       setPackData(null);
@@ -57,7 +62,7 @@ function App() {
       </header>
 
       <main className="app-main">
-        <ReadOnlyBanner packFileName={packData?.zipFile?.name} />
+        <ReadOnlyBanner packVerifyPath={packData?.packVerifyPath} />
         
         {!packData ? (
           <div className="upload-section">
@@ -69,6 +74,7 @@ function App() {
                 {demoMode ? '▼ Hide Demo Mode' : '▶ Show Demo Mode'}
               </button>
             </div>
+            <DemoPackLoader onLoadPack={handleFileSelect} isLoading={isLoading} />
             {demoMode && (
               <DemoMode onLoadPack={handleFileSelect} isLoading={isLoading} />
             )}
@@ -92,6 +98,12 @@ function App() {
               </div>
             </div>
 
+            <VerdictHeader
+              gcView={packData.gcView}
+              judgment={packData.judgment}
+              packData={packData}
+            />
+
             <PackStatusChip
               fileName={packData.zipFile?.name || 'unknown.zip'}
               gcView={packData.gcView}
@@ -106,22 +118,32 @@ function App() {
             <div className="panels-grid">
               <div className="panels-left">
                 <OutcomePanel gcView={packData.gcView} />
+                <RoundsTimeline
+                  transcriptJson={packData.transcript}
+                  replayVerifyResult={packData.replayVerifyResult}
+                  packVerifyResult={packData.packVerifyResult}
+                />
               </div>
               <div className="panels-right">
                 <IntegrityPanel 
                   gcView={packData.gcView} 
                   packFileName={packData.zipFile?.name}
+                  packVerifyPath={packData.packVerifyPath}
                   merkleDigest={packData.merkleDigest}
+                  packData={packData}
                 />
+                <WarningsAndExceptionsPanel packData={packData} />
                 <ResponsibilityPanel
                   judgment={packData.judgment}
                   gcView={packData.gcView}
                 />
                 <InsurancePanel insurerSummary={packData.insurerSummary} />
                 <PassportPanel
-                  insurerSummary={packData.insurerSummary}
+                  manifest={packData.manifest}
+                  transcriptJson={packData.transcript}
                   gcView={packData.gcView}
                   judgment={packData.judgment}
+                  insurerSummary={packData.insurerSummary}
                   transcriptId={packData.transcriptId}
                 />
               </div>
@@ -129,7 +151,10 @@ function App() {
 
             <EvidenceFilesPanel packData={packData} />
 
-            <VerifyLocally packFileName={packData.zipFile?.name} />
+            <VerifyLocally
+                packVerifyPath={packData.packVerifyPath}
+                packData={packData}
+              />
           </div>
         )}
       </main>

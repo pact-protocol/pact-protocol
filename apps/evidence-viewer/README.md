@@ -56,6 +56,17 @@ cp demo/h5-golden/tamper/auditor_pack_semantic_tampered.zip apps/evidence-viewer
 5. **Claims Intake Package** — Use "Generate Claims Intake Package" to create a ZIP for claims submission
 6. Use "Download" to extract individual files; use "Copy Verify Command" to verify the pack locally
 
+## What NOT to change (viewer-only)
+
+This app is **presentation only**. It reads packs and verifier output as-is and may normalize **display** (e.g. labels, tooltips, verdict summary). UI and PDFs display **"INDETERMINATE"** only—never "INDETERMINATE_TAMPER"—so auditors do not see "tamper" as an accusation. Do **not** change:
+
+- **Verifier output** — Do not change what the pact-verifier CLI or packages produce.
+- **Pack structure** — Do not change the auditor pack ZIP layout or required artifacts.
+- **DBL semantics** — Do not change Default Blame Logic or judgment semantics; only how they are displayed.
+- **Claims intake logic** — Do not change coverage, underwriting, or claims rules; only how they are presented (PDFs, metadata, README).
+
+All changes in this app are **viewer-only**.
+
 ## Architecture
 
 - **Vite + React + TypeScript**: Modern frontend stack
@@ -78,5 +89,6 @@ cp demo/h5-golden/tamper/auditor_pack_semantic_tampered.zip apps/evidence-viewer
 ✅ Copy Transcript ID to clipboard  
 ✅ Export GC View as Legal PDF  
 ✅ Export Insurer Summary PDF (with NOT INSURABLE / NON-STANDARD banners when applicable)  
+✅ **PDF export sanity:** Both GC and Insurer PDFs show **Integrity (pack verification): VALID** for success/101/420 packs; any mismatch warnings appear under **"Warnings & Exceptions"** (as "Warnings: …"), never as "Integrity Verdict"  
 ✅ Generate Claims Intake Package (ZIP)  
 ✅ Passport Panel shows buyer/provider tiers and scores; warnings for non-standard / low confidence / recent failures

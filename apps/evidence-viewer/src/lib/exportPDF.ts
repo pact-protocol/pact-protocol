@@ -1,5 +1,6 @@
 import type { AuditorPackData } from '../types';
 import { formatDate, formatConfidence } from './loadPack';
+import { getIntegrityStatusForPack, getWarningsAndExceptions, displayIntegrityOrFault, getVerdictSummaryLine, INDETERMINATE_TOOLTIP } from './integrity';
 
 /**
  * Export GC View as a legal PDF document.
@@ -96,14 +97,25 @@ export async function exportGCViewPDF(packData: AuditorPackData): Promise<void> 
   const { manifest, gcView, judgment, insurerSummary, transcriptId, transcript } = packData;
   const status = gcView.executive_summary.status;
   const approvalRisk = gcView.gc_takeaways?.approval_risk || 'UNKNOWN';
-  const faultDomain = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || 'UNKNOWN';
+  const faultDomainRaw = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || 'UNKNOWN';
+  const faultDomain = displayIntegrityOrFault(faultDomainRaw);
   const requiredAction = gcView.responsibility.judgment?.required_action || judgment.requiredAction || 'NONE';
   const requiredNextActor = gcView.responsibility.judgment?.required_next_actor || judgment.requiredNextActor || 'NONE';
   const moneyMoved = formatMoneyMoved(gcView.executive_summary.money_moved);
   const confidence = judgment.confidence;
+  const integrityStatusRaw = getIntegrityStatusForPack(packData);
+  const integrityStatus = displayIntegrityOrFault(integrityStatusRaw);
+  const judgmentDisplay = displayIntegrityOrFault(judgment.dblDetermination || '');
   const hashChainStatus = gcView.integrity.hash_chain;
   const signaturesVerified = `${gcView.integrity.signatures_verified.verified}/${gcView.integrity.signatures_verified.total}`;
-  const integrityVerdict = gcView.integrity.final_hash_validation;
+  const wa = getWarningsAndExceptions(
+    packData.packVerifyResult,
+    gcView,
+    packData.insurerSummary,
+    !!packData.merkleDigest,
+    !!packData.replayVerifyResult,
+    packData.integrityResult
+  );
   const verifyCommand = `pact-verifier auditor-pack-verify --zip <auditor_pack.zip>`;
   
   // Extract timestamp from transcript if available, otherwise use manifest
@@ -125,6 +137,20 @@ export async function exportGCViewPDF(packData: AuditorPackData): Promise<void> 
   // ===== PAGE 1: Executive Summary =====
   addSectionTitle('PACT GC VIEW — EXECUTIVE SUMMARY', 16);
   yPos += 5;
+
+  // Verdict Summary (one line at top)
+  const verdictLine = getVerdictSummaryLine(packData);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('Verdict Summary', margin, yPos);
+  yPos += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  const verdictLines = doc.splitTextToSize(verdictLine, contentWidth);
+  doc.text(verdictLines, margin, yPos);
+  yPos += verdictLines.length * 6 + 8;
+  doc.setFont('helvetica', 'normal');
 
   addBoxedNote('This document is a presentation layer. Verification requires the original auditor pack.');
   yPos += 5;
@@ -159,8 +185,28 @@ export async function exportGCViewPDF(packData: AuditorPackData): Promise<void> 
   addSectionTitle('RESPONSIBILITY & OUTCOME', 14);
   yPos += 5;
 
-  addLabelValue('Judgment Summary', judgment.dblDetermination || 'N/A');
+  addLabelValue('Judgment Summary', judgmentDisplay || 'N/A');
+  if (judgmentDisplay === 'INDETERMINATE') {
+    if (yPos > pageHeight - 25) addPage();
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
+    doc.text(INDETERMINATE_TOOLTIP, margin, yPos);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
+    yPos += 7;
+  }
   addLabelValue('Fault Attribution', faultDomain);
+  if (faultDomain === 'INDETERMINATE') {
+    if (yPos > pageHeight - 25) addPage();
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
+    doc.text(INDETERMINATE_TOOLTIP, margin, yPos);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
+    yPos += 7;
+  }
   addLabelValue('Required Next Actor', requiredNextActor);
   addLabelValue('Money Moved', moneyMoved);
   addLabelValue('Confidence Score', formatConfidence(confidence));
@@ -201,9 +247,19 @@ export async function exportGCViewPDF(packData: AuditorPackData): Promise<void> 
   addSectionTitle('INTEGRITY & VERIFICATION', 14);
   yPos += 5;
 
+  addLabelValue('Integrity (pack verification)', integrityStatus);
+  if (integrityStatus === 'INDETERMINATE') {
+    if (yPos > pageHeight - 25) addPage();
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
+    doc.text(INDETERMINATE_TOOLTIP, margin, yPos);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
+    yPos += 7;
+  }
   addLabelValue('Hash Chain Status', hashChainStatus);
   addLabelValue('Signature Verification', signaturesVerified);
-  addLabelValue('Integrity Verdict', integrityVerdict);
 
   // Add verify command in monospace box
   if (yPos > pageHeight - 50) {
@@ -224,26 +280,48 @@ export async function exportGCViewPDF(packData: AuditorPackData): Promise<void> 
   doc.text(verifyCommand, margin + 5, yPos + 5);
   yPos += 20;
 
-  // Add integrity notes if present
-  if (gcView.integrity.notes && gcView.integrity.notes.length > 0) {
+  // Warnings & Exceptions (do not affect Integrity verdict; claimed vs computed mismatch here, not tamper)
+  const hasWa = wa.packIntegrityWarnings.length > 0 || wa.hashMismatches.length > 0 || wa.nonstandardConstitution.length > 0 || wa.missingOptionalArtifacts.length > 0;
+  if (hasWa) {
     if (yPos > pageHeight - 50) {
       addPage();
     }
     yPos += 5;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
-    doc.text('Integrity Notes:', margin, yPos);
+    doc.text('Warnings & Exceptions', margin, yPos);
     yPos += 7;
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
+    doc.text('Warnings are informational only. They do not affect the Integrity verdict.', margin, yPos);
+    yPos += 8;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
-    gcView.integrity.notes.forEach((note) => {
-      if (yPos > pageHeight - 20) {
+    doc.setTextColor(0, 0, 0);
+    const addWaGroup = (label: string, items: string[]) => {
+      if (items.length === 0) return;
+      if (yPos > pageHeight - 30) {
         addPage();
       }
-      const noteLines = doc.splitTextToSize(`• ${note}`, contentWidth);
-      doc.text(noteLines, margin, yPos);
-      yPos += noteLines.length * 5 + 2;
-    });
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Warnings: ${label}`, margin, yPos);
+      yPos += 6;
+      doc.setFont('helvetica', 'normal');
+      items.forEach((w) => {
+        if (yPos > pageHeight - 20) {
+          addPage();
+        }
+        const lines = doc.splitTextToSize(`• ${w}`, contentWidth);
+        doc.text(lines, margin, yPos);
+        yPos += lines.length * 5 + 2;
+      });
+      yPos += 4;
+    };
+    addWaGroup('Pack integrity', wa.packIntegrityWarnings);
+    addWaGroup('Claimed vs computed transcript hash', wa.hashMismatches);
+    addWaGroup('Nonstandard constitution', wa.nonstandardConstitution);
+    addWaGroup('Missing optional artifacts', wa.missingOptionalArtifacts);
   }
 
   addFooter();
@@ -485,8 +563,18 @@ export async function exportInsurerSummaryPDF(packData: AuditorPackData): Promis
   const coverage = insurerSummary.coverage;
   const confidence = judgment.confidence;
   const constitutionHash = manifest.constitution_hash;
-  const integrityStatus = gcView.integrity.hash_chain;
-  const faultDomain = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || 'UNKNOWN';
+  const integrityStatusRaw = getIntegrityStatusForPack(packData);
+  const integrityStatus = displayIntegrityOrFault(integrityStatusRaw);
+  const wa = getWarningsAndExceptions(
+    packData.packVerifyResult,
+    gcView,
+    insurerSummary,
+    !!packData.merkleDigest,
+    !!packData.replayVerifyResult,
+    packData.integrityResult
+  );
+  const faultDomainRaw = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || 'UNKNOWN';
+  const faultDomain = displayIntegrityOrFault(faultDomainRaw);
   const riskFactors = insurerSummary.risk_factors || [];
   const surcharges = insurerSummary.surcharges || [];
   const constitutionWarning = insurerSummary.constitution_warning;
@@ -498,6 +586,20 @@ export async function exportInsurerSummaryPDF(packData: AuditorPackData): Promis
   // ===== PAGE 1: Underwriting Decision =====
   addSectionTitle('PACT INSURER VIEW — UNDERWRITING DECISION', 16);
   yPos += 5;
+
+  // Verdict Summary (one line at top)
+  const verdictLine = getVerdictSummaryLine(packData);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('Verdict Summary', margin, yPos);
+  yPos += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  const verdictLines = doc.splitTextToSize(verdictLine, contentWidth);
+  doc.text(verdictLines, margin, yPos);
+  yPos += verdictLines.length * 6 + 8;
+  doc.setFont('helvetica', 'normal');
 
   // Add EXCLUDED banner if applicable
   if (coverage === 'EXCLUDED') {
@@ -519,7 +621,17 @@ export async function exportInsurerSummaryPDF(packData: AuditorPackData): Promis
   addTableRow('Coverage', coverage);
   addTableRow('Confidence Score', formatConfidence(confidence));
   addTableRow('Constitution Hash', constitutionHash.substring(0, 16) + '...', true);
-  addTableRow('Integrity Status', integrityStatus);
+  addTableRow('Integrity (pack verification)', integrityStatus);
+  if (integrityStatus === 'INDETERMINATE') {
+    if (yPos > pageHeight - 25) addPage();
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
+    doc.text(INDETERMINATE_TOOLTIP, margin, yPos);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
+    yPos += 7;
+  }
 
   addFooter();
 
@@ -529,6 +641,16 @@ export async function exportInsurerSummaryPDF(packData: AuditorPackData): Promis
   yPos += 5;
 
   addTableRow('Fault Domain', faultDomain);
+  if (faultDomain === 'INDETERMINATE') {
+    if (yPos > pageHeight - 25) addPage();
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
+    doc.text(INDETERMINATE_TOOLTIP, margin, yPos);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
+    yPos += 7;
+  }
 
   // Risk factors list
   if (yPos > pageHeight - 50) {
@@ -642,26 +764,48 @@ export async function exportInsurerSummaryPDF(packData: AuditorPackData): Promis
     yPos += 10;
   }
 
-  // Integrity warnings
-  if (gcView.integrity.notes && gcView.integrity.notes.length > 0) {
+  // Warnings & Exceptions (do not affect Integrity verdict; claimed vs computed mismatch here, not tamper)
+  const hasWa = wa.packIntegrityWarnings.length > 0 || wa.hashMismatches.length > 0 || wa.nonstandardConstitution.length > 0 || wa.missingOptionalArtifacts.length > 0;
+  if (hasWa) {
     if (yPos > pageHeight - 50) {
       addPage();
     }
     yPos += 5;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
-    doc.text('Integrity Warnings:', margin, yPos);
+    doc.text('Warnings & Exceptions', margin, yPos);
     yPos += 7;
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(100, 100, 100);
+    doc.text('Warnings are informational only. They do not affect the Integrity verdict.', margin, yPos);
+    yPos += 8;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
-    gcView.integrity.notes.forEach((note) => {
-      if (yPos > pageHeight - 20) {
+    doc.setTextColor(0, 0, 0);
+    const addWaGroup = (label: string, items: string[]) => {
+      if (items.length === 0) return;
+      if (yPos > pageHeight - 30) {
         addPage();
       }
-      const noteLines = doc.splitTextToSize(`• ${note}`, contentWidth);
-      doc.text(noteLines, margin, yPos);
-      yPos += noteLines.length * 5 + 2;
-    });
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Warnings: ${label}`, margin, yPos);
+      yPos += 6;
+      doc.setFont('helvetica', 'normal');
+      items.forEach((w) => {
+        if (yPos > pageHeight - 20) {
+          addPage();
+        }
+        const lines = doc.splitTextToSize(`• ${w}`, contentWidth);
+        doc.text(lines, margin, yPos);
+        yPos += lines.length * 5 + 2;
+      });
+      yPos += 4;
+    };
+    addWaGroup('Pack integrity', wa.packIntegrityWarnings);
+    addWaGroup('Claimed vs computed transcript hash', wa.hashMismatches);
+    addWaGroup('Nonstandard constitution', wa.nonstandardConstitution);
+    addWaGroup('Missing optional artifacts', wa.missingOptionalArtifacts);
   }
 
   // Reason for exclusion (if EXCLUDED)

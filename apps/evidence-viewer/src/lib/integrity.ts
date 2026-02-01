@@ -1,0 +1,166 @@
+import type { AuditorPackData, GCView, InsurerSummary, PackVerifyResultView } from '../types';
+
+/** Warnings and exceptions for display only. Do not affect Integrity verdict. */
+export interface WarningsAndExceptions {
+  /** Pack integrity warnings (integrityResult.warnings); claimed vs computed mismatch appears here, not as tamper. */
+  packIntegrityWarnings: string[];
+  /** Legacy: claimed vs computed from pack_verify.mismatches / gc_view when no integrityResult. */
+  hashMismatches: string[];
+  /** Nonstandard constitution flags (risk factors, surcharges, constitution_warning). */
+  nonstandardConstitution: string[];
+  /** Missing optional artifacts (pack_verify, merkle digest, replay_verify). */
+  missingOptionalArtifacts: string[];
+}
+
+/** Integrity derived only from auditor pack verification (pack_verify). */
+export type IntegrityStatus = 'VALID' | 'TAMPERED' | 'INDETERMINATE' | 'UNKNOWN';
+
+/**
+ * Tooltip for INDETERMINATE (UI and PDFs only).
+ * Auditors must never see "tamper" as an accusation; display "INDETERMINATE" only.
+ */
+export const INDETERMINATE_TOOLTIP =
+  'Insufficient evidence to classify as VALID or TAMPERED.';
+
+/** Shown when integrityResult is missing; prompt to verify via CLI. */
+export const INDETERMINATE_VERIFY_VIA_CLI =
+  'Insufficient evidence; verify pack via CLI.';
+
+/**
+ * Display value for integrity or fault domain.
+ * UI and PDFs must show "INDETERMINATE" only—never "INDETERMINATE_TAMPER" or "UNKNOWN".
+ * UNKNOWN is never shown; map to INDETERMINATE.
+ */
+export function displayIntegrityOrFault(value: string): string {
+  if (value === 'INDETERMINATE_TAMPER' || value === 'UNKNOWN') return 'INDETERMINATE';
+  return value;
+}
+
+/**
+ * Top-level integrity from pack_verify only.
+ * - recompute_ok === true → VALID
+ * - recompute_ok === false → TAMPERED
+ * - ok === false (recompute unknown) → INDETERMINATE
+ * - Otherwise → UNKNOWN (no pack_verify, invalid, or ok true but recompute not true)
+ */
+export function integrityFromPackVerify(pv: unknown): IntegrityStatus | null {
+  if (!pv || typeof pv !== 'object') return null;
+  const r = pv as PackVerifyResultView;
+  const recomputeFalse = r.recompute_ok === false;
+  const recomputeOk = r.recompute_ok === true;
+
+  if (recomputeFalse) return 'TAMPERED';
+  if (r.ok === false) return 'INDETERMINATE';
+  if (recomputeOk) return 'VALID';
+  return 'UNKNOWN';
+}
+
+/**
+ * Integrity status: pack_verify only. No fallback from gc_view, DBL, or replay.
+ * Returns UNKNOWN when pack_verify is absent or invalid.
+ */
+export function getIntegrityStatus(packVerifyResult: unknown): IntegrityStatus {
+  const fromPack = integrityFromPackVerify(packVerifyResult);
+  return fromPack ?? 'UNKNOWN';
+}
+
+/**
+ * Top-level integrity for display: use pack.integrityResult.status only.
+ * When integrityResult is missing, return INDETERMINATE (never UNKNOWN); caller may show "verify via CLI" hint.
+ */
+export function getIntegrityStatusForPack(packData: AuditorPackData): IntegrityStatus {
+  if (packData.integrityResult?.status != null) {
+    return packData.integrityResult.status;
+  }
+  return 'INDETERMINATE';
+}
+
+/**
+ * One-line verdict summary for UI and PDFs.
+ * Format: OUTCOME — Money moved: YES/NO — Judgment: X — Integrity: X — Confidence: 0.xx
+ */
+export function getVerdictSummaryLine(packData: AuditorPackData): string {
+  const { gcView, judgment } = packData;
+  const outcome = gcView.executive_summary?.status ?? '—';
+  const moneyMoved =
+    gcView.executive_summary?.money_moved === true
+      ? 'YES'
+      : gcView.executive_summary?.money_moved === false
+        ? 'NO'
+        : 'UNKNOWN';
+  const judgmentRaw =
+    judgment?.dblDetermination ?? gcView.responsibility?.judgment?.fault_domain ?? '—';
+  const judgmentDisplay = typeof judgmentRaw === 'string' ? displayIntegrityOrFault(judgmentRaw) : '—';
+  const integrityDisplay = displayIntegrityOrFault(getIntegrityStatusForPack(packData));
+  const confidence =
+    judgment?.confidence != null ? judgment.confidence.toFixed(2) : '—';
+  return `${outcome} — Money moved: ${moneyMoved} — Judgment: ${judgmentDisplay} — Integrity: ${integrityDisplay} — Confidence: ${confidence}`;
+}
+
+/**
+ * Warnings list: claimed-vs-computed hash mismatches from pack_verify.mismatches,
+ * plus gc_view integrity notes that indicate hash/transcript mismatch (informational).
+ * Does not drive integrity status; for display only.
+ */
+export function getIntegrityWarnings(
+  packVerifyResult: unknown,
+  gcView: GCView | undefined
+): string[] {
+  const warnings: string[] = [];
+  if (packVerifyResult && typeof packVerifyResult === 'object') {
+    const r = packVerifyResult as PackVerifyResultView;
+    if (Array.isArray(r.mismatches)) {
+      warnings.push(...r.mismatches);
+    }
+  }
+  if (gcView?.integrity?.notes?.length) {
+    const hashPatterns = [/final[\s_-]?hash/i, /transcript[\s_-]?hash/i, /hash[\s_-]?mismatch/i, /hash[\s_-]?chain/i];
+    for (const note of gcView.integrity.notes) {
+      if (hashPatterns.some((p) => p.test(note))) {
+        warnings.push(note);
+      }
+    }
+  }
+  return warnings;
+}
+
+/**
+ * Collect all warnings and exceptions for the "Warnings & Exceptions" section.
+ * Labels are informational only; they do not affect the Integrity verdict.
+ * Prefers integrityResult.warnings when present (packs do not contain pack_verify).
+ */
+export function getWarningsAndExceptions(
+  packVerifyResult: unknown,
+  gcView: GCView | undefined,
+  insurerSummary: InsurerSummary | undefined,
+  hasMerkleDigest: boolean,
+  hasReplayVerifyResult: boolean,
+  integrityResult?: { warnings?: string[] } | null
+): WarningsAndExceptions {
+  const packIntegrityWarnings = integrityResult?.warnings ?? [];
+  const hashMismatches = integrityResult ? [] : getIntegrityWarnings(packVerifyResult, gcView);
+
+  const nonstandardConstitution: string[] = [];
+  if (insurerSummary?.risk_factors?.includes('NON_STANDARD_RULES')) {
+    nonstandardConstitution.push('Non-standard rules (risk factor).');
+  }
+  if (insurerSummary?.surcharges?.includes('NON_STANDARD_CONSTITUTION')) {
+    nonstandardConstitution.push('Non-standard constitution (surcharge).');
+  }
+  if (insurerSummary?.constitution_warning) {
+    nonstandardConstitution.push(insurerSummary.constitution_warning);
+  }
+
+  const missingOptionalArtifacts: string[] = [];
+  if (!integrityResult && (!packVerifyResult || typeof packVerifyResult !== 'object')) {
+    missingOptionalArtifacts.push('Pack verification result not present (integrity unknown).');
+  }
+  if (!hasMerkleDigest) {
+    missingOptionalArtifacts.push('Merkle digest not present.');
+  }
+  if (!hasReplayVerifyResult) {
+    missingOptionalArtifacts.push('Replay verification result not present.');
+  }
+
+  return { packIntegrityWarnings, hashMismatches, nonstandardConstitution, missingOptionalArtifacts };
+}

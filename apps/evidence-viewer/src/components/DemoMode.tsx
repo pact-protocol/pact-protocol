@@ -1,7 +1,7 @@
 import './DemoMode.css';
 
 interface DemoModeProps {
-  onLoadPack: (file: File) => void;
+  onLoadPack: (file: File, verifyPath?: string) => void;
   isLoading: boolean;
 }
 
@@ -35,7 +35,8 @@ export default function DemoMode({ onLoadPack, isLoading }: DemoModeProps) {
       }
       const blob = await response.blob();
       const file = new File([blob], fileName, { type: 'application/zip' });
-      onLoadPack(file);
+      const verifyPath = path.replace(/^\//, '');
+      onLoadPack(file, verifyPath);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       console.error(`Failed to load demo pack from ${path}:`, errorMsg);

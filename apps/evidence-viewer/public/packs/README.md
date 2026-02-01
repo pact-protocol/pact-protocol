@@ -1,30 +1,28 @@
-# Demo Packs
+# Demo Packs (fixtures)
 
-This directory contains pre-generated auditor packs for the Evidence Viewer demo mode.
+**These are fixtures for the Evidence Viewer demo.** The `.zip` files in this directory are **not committed** to the repo. The canonical source is `design_partner_bundle/packs/` (and `design_partner_bundle/demo/h5-golden/` for tamper).
 
-## Files
+- **Load Demo Pack** dropdown: fetches `/packs/<filename>`. To enable it, copy packs here (see below).
+- **Drag-drop or design_partner_bundle**: you can always load packs from `design_partner_bundle/packs/` by opening that folder and dragging a `.zip` into the viewer.
 
-- `success.zip` - Success scenario (COMPLETED, NO_FAULT)
-- `policy_abort.zip` - Policy abort scenario (ABORTED_POLICY, BUYER_AT_FAULT)
-- `tamper.zip` - Tamper detection scenario (FAILED_INTEGRITY)
+## Canonical source
 
-## Source
+| Demo option       | Filename                          | Source |
+|-------------------|-----------------------------------|--------|
+| Success           | `auditor_pack_success.zip`        | `design_partner_bundle/packs/` |
+| Policy Abort 101  | `auditor_pack_101.zip`            | `design_partner_bundle/packs/` |
+| Timeout 420       | `auditor_pack_420.zip`            | `design_partner_bundle/packs/` |
+| Tamper            | `auditor_pack_semantic_tampered.zip` | `design_partner_bundle/demo/h5-golden/tamper/` |
 
-These packs are copied from:
-- `design_partner_bundle/packs/auditor_pack_success.zip` → `success.zip`
-- `design_partner_bundle/packs/auditor_pack_101.zip` → `policy_abort.zip`
-- `demo/h5-golden/tamper/auditor_pack_semantic_tampered.zip` → `tamper.zip`
+## Enabling the demo dropdown (optional)
 
-## Regenerating
-
-To update these packs, run the demo scripts and copy the generated files:
+From repo root, copy fixtures so the in-app **Load Demo Pack** dropdown works:
 
 ```bash
-# Run demos to generate packs
-bash demo/h5-golden/run_all.sh
-
-# Copy to public folder
-cp design_partner_bundle/packs/auditor_pack_success.zip apps/evidence-viewer/public/packs/success.zip
-cp design_partner_bundle/packs/auditor_pack_101.zip apps/evidence-viewer/public/packs/policy_abort.zip
-cp demo/h5-golden/tamper/auditor_pack_semantic_tampered.zip apps/evidence-viewer/public/packs/tamper.zip
+cp design_partner_bundle/packs/auditor_pack_success.zip apps/evidence-viewer/public/packs/
+cp design_partner_bundle/packs/auditor_pack_101.zip apps/evidence-viewer/public/packs/
+cp design_partner_bundle/packs/auditor_pack_420.zip apps/evidence-viewer/public/packs/
+cp design_partner_bundle/demo/h5-golden/tamper/auditor_pack_semantic_tampered.zip apps/evidence-viewer/public/packs/
 ```
+
+Optional legacy names for DemoMode: `success.zip`, `policy_abort.zip`, `tamper.zip` — same scenarios if present.

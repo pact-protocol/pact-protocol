@@ -1,12 +1,31 @@
 # Evidence Viewer (Don)
 
-Evidence Viewer is currently **v0** (app version 0.1.x). The implementation lives at [apps/evidence-viewer](../../apps/evidence-viewer). This folder tracks Don-level documentation and release expectations only.
+Official instructions for using the Evidence Viewer with the Design Partner Kit.
 
-**Purpose:** Docs and packaging for the evidence viewer app used by design partners and auditors.
+- **Evidence Viewer implementation:** [apps/evidence-viewer](../../apps/evidence-viewer) (v0.1.x)
+- **Canonical packs:** [design_partner_bundle/packs](../../design_partner_bundle/packs)
 
-**What will go here:**
+This folder tracks Don-level documentation and release expectations only. Don does not change how evidence is produced or verified.
 
-- **README.md** (this file) — What the evidence viewer is: GC view, insurer summary, claims package, passport panel; how to run it; how it consumes existing Pact evidence (no protocol changes)
-- Links or instructions to the app and how Don packages it for distribution
+## Quickstart
 
-Don only packages and documents the viewer; it does not change how evidence is produced or verified.
+From repo root:
+
+```bash
+pnpm install
+pnpm --filter @pact/evidence-viewer dev
+```
+
+Then drag-and-drop a pack zip from `design_partner_bundle/packs` into the viewer (e.g. `auditor_pack_success.zip`).
+
+Optional: run kit verification first: `./don/design_partner_kit/verify_all.sh`.
+
+**If you see "vite: command not found"** — run `pnpm install` from repo root (workspace install).
+
+## What you should see
+
+- **Verdict header** — VALID, TAMPERED, or INDETERMINATE
+- **Round timeline** — Negotiation and settlement rounds
+- **DBL judgment** — Blame attribution and confidence
+- **Constitution status** — Rules-of-evidence compliance
+- **Passport snapshot** — Agent reputation/credit (if present in the pack)

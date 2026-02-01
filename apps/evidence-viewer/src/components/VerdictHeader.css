@@ -1,0 +1,41 @@
+.verdict-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.verdict-sep {
+  color: #999;
+  user-select: none;
+}
+
+.verdict-integrity.verdict-VALID {
+  color: #006600;
+}
+
+.verdict-integrity.verdict-TAMPERED {
+  color: #CC0000;
+  font-weight: 600;
+}
+
+.verdict-integrity.verdict-INDETERMINATE {
+  color: #996600;
+}
+
+.verdict-integrity.verdict-UNKNOWN,
+.verdict-integrity.verdict-unknown {
+  color: #666;
+}
+
+.verdict-judgment,
+.verdict-confidence {
+  color: #333;
+}

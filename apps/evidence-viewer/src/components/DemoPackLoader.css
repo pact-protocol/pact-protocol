@@ -1,0 +1,31 @@
+.demo-pack-loader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.demo-pack-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+}
+
+.demo-pack-select {
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+  min-width: 180px;
+}
+
+.demo-pack-select:focus {
+  outline: none;
+  border-color: #006600;
+}
+
+.demo-pack-select:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}

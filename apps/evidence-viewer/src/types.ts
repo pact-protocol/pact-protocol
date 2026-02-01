@@ -7,6 +7,9 @@ export interface Manifest {
   /** Audit tier (informational only; default T1). Does not affect verification. */
   audit_tier?: 'T1' | 'T2' | 'T3';
   audit_sla?: string;
+  /** Optional passport / pack metadata (display only). */
+  passport_snapshot?: unknown;
+  passport_last_updated_ms?: number;
 }
 
 export interface GCView {
@@ -74,6 +77,9 @@ export interface Judgment {
   requiredAction: string;
   terminal: boolean;
   confidence: number;
+  /** Optional passport impact from DBL (display only). */
+  passportImpact?: number;
+  responsible_signer_pubkey?: string;
 }
 
 export interface InsurerSummary {
@@ -110,6 +116,56 @@ export interface MerkleDigest {
   signature?: string;
 }
 
+/** Minimal transcript round for timeline (v4 schema). */
+export interface TranscriptRoundView {
+  round_number: number;
+  round_type: string;
+  agent_id?: string;
+  public_key_b58?: string;
+  signature?: { signer_public_key_b58?: string };
+}
+
+/** Minimal transcript root for timeline (v4 schema). */
+export interface TranscriptView {
+  rounds?: TranscriptRoundView[];
+}
+
+/** Replay/verify result with optional per-round errors (verifier output). */
+export interface ReplayVerifyResultView {
+  rounds_verified?: number;
+  errors?: Array<{ type?: string; round_number?: number; message?: string }>;
+}
+
+/** Pack verify result (auditor-pack-verify output). Used for top-level integrity. */
+export interface PackVerifyResultView {
+  ok?: boolean;
+  recompute_ok?: boolean;
+  checksums_ok?: boolean;
+  mismatches?: string[];
+}
+
+/** Client-side integrity computed from pack contents only (no network). */
+export interface IntegrityResult {
+  status: 'VALID' | 'TAMPERED' | 'INDETERMINATE';
+  checksums: {
+    status: 'VALID' | 'INVALID' | 'UNAVAILABLE';
+    checkedCount: number;
+    totalCount: number;
+    failures: string[];
+  };
+  hashChain: {
+    status: 'VALID' | 'INVALID';
+    details?: string;
+  };
+  signatures: {
+    status: 'VALID' | 'INVALID' | 'UNVERIFIABLE';
+    verifiedCount: number;
+    totalCount: number;
+    failures: string[];
+  };
+  warnings: string[];
+}
+
 export interface AuditorPackData {
   manifest: Manifest;
   gcView: GCView;
@@ -122,4 +178,12 @@ export interface AuditorPackData {
   zipFile?: File;
   /** Optional Merkle digest; present when pack was built with --merkle-digest */
   merkleDigest?: MerkleDigest;
+  /** @deprecated Packs do not contain pack_verify.json; use integrityResult instead. */
+  packVerifyResult?: unknown;
+  /** @deprecated Packs do not contain replay_verify.json. */
+  replayVerifyResult?: unknown;
+  /** Path for verify command: e.g. "packs/auditor_pack_success.zip" (demo) or original filename (drag-drop) */
+  packVerifyPath?: string;
+  /** Client-side integrity from pack contents (input/transcript.json hash chain, checksums, signatures). */
+  integrityResult?: IntegrityResult;
 }

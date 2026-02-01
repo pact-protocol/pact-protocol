@@ -2,25 +2,27 @@ import CopyVerifyCommandButton from './CopyVerifyCommandButton';
 import './ReadOnlyBanner.css';
 
 interface ReadOnlyBannerProps {
-  packFileName?: string;
+  /** Path for verify command: e.g. "packs/auditor_pack_success.zip" (demo) or original filename (drag-drop) */
+  packVerifyPath?: string;
 }
 
-export default function ReadOnlyBanner({ packFileName }: ReadOnlyBannerProps) {
+export default function ReadOnlyBanner({ packVerifyPath }: ReadOnlyBannerProps) {
   return (
     <div className="read-only-banner">
       <div className="banner-header">
         <h2 className="banner-title">Read-Only Evidence Viewer</h2>
-        {packFileName && (
-          <CopyVerifyCommandButton packFileName={packFileName} variant="banner" />
+        {packVerifyPath && (
+          <CopyVerifyCommandButton packVerifyPath={packVerifyPath} variant="banner" />
         )}
       </div>
       <p className="banner-text">
         Source of truth is the Auditor Pack ZIP. This viewer does not execute transactions.
       </p>
       <div className="banner-verification">
-        <span className="verification-label">Verification:</span>
+        <span className="verification-label">Verify this pack locally (offline):</span>
+        <p className="verification-readonly">This viewer is read-only. Verification must be done with the CLI.</p>
         <code className="verification-command">
-          pact-verifier auditor-pack-verify --zip {packFileName || '<file>'}
+          pact-verifier auditor-pack-verify --zip {packVerifyPath || '<file>'}
         </code>
       </div>
       <p className="banner-note">

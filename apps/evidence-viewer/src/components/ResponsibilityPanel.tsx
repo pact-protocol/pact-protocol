@@ -1,5 +1,6 @@
 import type { Judgment, GCView } from '../types';
 import { formatConfidence, truncateHash } from '../lib/loadPack';
+import { displayIntegrityOrFault, INDETERMINATE_TOOLTIP } from '../lib/integrity';
 import './Panel.css';
 
 interface ResponsibilityPanelProps {
@@ -9,6 +10,8 @@ interface ResponsibilityPanelProps {
 
 export default function ResponsibilityPanel({ judgment, gcView }: ResponsibilityPanelProps) {
   const { dblDetermination, requiredNextActor, requiredAction, terminal, confidence } = judgment;
+  const faultDomainDisplay = displayIntegrityOrFault(dblDetermination);
+  const faultDomainTooltip = faultDomainDisplay === 'INDETERMINATE' ? INDETERMINATE_TOOLTIP : undefined;
   const { last_valid_signed_hash, blame_explanation } = gcView.responsibility;
 
   return (
@@ -17,7 +20,7 @@ export default function ResponsibilityPanel({ judgment, gcView }: Responsibility
       <div className="panel-content">
         <div className="responsibility-item">
           <span className="responsibility-label">Fault Domain:</span>
-          <span className="responsibility-value">{dblDetermination}</span>
+          <span className="responsibility-value" title={faultDomainTooltip}>{faultDomainDisplay}</span>
         </div>
         <div className="responsibility-item">
           <span className="responsibility-label">Next Actor:</span>

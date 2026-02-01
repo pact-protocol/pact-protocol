@@ -78,6 +78,31 @@
 }
 
 /* Integrity Panel */
+.integrity-hash-mismatch-note {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  color: #856404;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.integrity-warnings {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  color: #856404;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.integrity-warnings ul {
+  margin: 6px 0 0 20px;
+  font-size: 12px;
+}
+
 .tamper-warning {
   background: #ffe6e6;
   border: 2px solid #CC0000;
@@ -127,6 +152,49 @@
   background: #ffe6e6;
 }
 
+.integrity-badge.neutral {
+  color: #666;
+  border-color: #999;
+  background: #f0f0f0;
+}
+
+.integrity-failures {
+  margin: 4px 0 8px 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: #333;
+}
+
+.integrity-failures li {
+  margin-bottom: 4px;
+}
+
+.integrity-detail {
+  margin: 0 0 8px 0;
+  padding-left: 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.integrity-warnings-section {
+  margin-top: 12px;
+  padding: 12px;
+  background: #fffbf0;
+  border-left: 3px solid #ffc107;
+}
+
+.integrity-warnings-section .warnings-group-label {
+  font-weight: bold;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.integrity-warnings-section .warnings-disclaimer {
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
 .integrity-notes {
   margin-top: 12px;
   padding: 12px;
@@ -143,6 +211,39 @@
 .integrity-notes ul {
   margin-left: 20px;
   font-size: 12px;
+}
+
+/* Warnings & Exceptions Panel */
+.warnings-and-exceptions-panel {
+  border-left: 3px solid #ffc107;
+}
+
+.warnings-disclaimer {
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+  margin-bottom: 12px;
+}
+
+.warnings-group {
+  margin-bottom: 14px;
+}
+
+.warnings-group:last-child {
+  margin-bottom: 0;
+}
+
+.warnings-group-label {
+  font-weight: bold;
+  font-size: 12px;
+  color: #856404;
+  margin-bottom: 6px;
+}
+
+.warnings-group ul {
+  margin: 0 0 0 20px;
+  font-size: 12px;
+  color: #333;
 }
 
 .integrity-value.monospace {
@@ -344,11 +445,53 @@
   border-left: 3px solid #999;
 }
 
+.passport-section {
+  margin-bottom: 16px;
+}
+
+.passport-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.passport-identifier {
+  font-size: 12px;
+  font-family: 'Courier New', Courier, monospace;
+  background: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  word-break: break-all;
+}
+
 .passport-entity {
   border: 1px solid #ddd;
   padding: 12px;
   margin-bottom: 12px;
   background: #fafafa;
+}
+
+.passport-disputes,
+.passport-flags {
+  display: block;
+  font-size: 12px;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.passport-timestamp {
+  font-size: 12px;
+  font-family: 'Courier New', Courier, monospace;
+  color: #555;
+}
+
+.passport-command-inline {
+  font-size: 11px;
+  background: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 3px;
 }
 
 .passport-entity-header {

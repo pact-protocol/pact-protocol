@@ -2,21 +2,22 @@ import { useState } from 'react';
 import './CopyVerifyCommandButton.css';
 
 interface CopyVerifyCommandButtonProps {
-  packFileName?: string;
+  /** Path for verify command: e.g. "packs/auditor_pack_success.zip" (demo) or original filename (drag-drop) */
+  packVerifyPath?: string;
   variant?: 'banner' | 'panel';
 }
 
-export default function CopyVerifyCommandButton({ packFileName, variant = 'banner' }: CopyVerifyCommandButtonProps) {
+export default function CopyVerifyCommandButton({ packVerifyPath, variant = 'banner' }: CopyVerifyCommandButtonProps) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isDisabled = !packFileName;
-  const command = packFileName 
-    ? `pact-verifier auditor-pack-verify --zip ${packFileName}`
+  const isDisabled = !packVerifyPath;
+  const command = packVerifyPath
+    ? `pact-verifier auditor-pack-verify --zip ${packVerifyPath}`
     : 'pact-verifier auditor-pack-verify --zip <file>';
 
   const handleCopy = async () => {
-    if (isDisabled || !packFileName) return;
+    if (isDisabled || !packVerifyPath) return;
     
     try {
       await navigator.clipboard.writeText(command);
