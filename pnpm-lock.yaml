@@ -38,6 +38,9 @@ importers:
 
   apps/evidence-viewer:
     dependencies:
+      '@pact/verifier':
+        specifier: workspace:*
+        version: link:../../packages/verifier
       bs58:
         specifier: ^5.0.0
         version: 5.0.0
