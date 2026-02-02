@@ -19,12 +19,18 @@ export function getConstitutionPath(constitutionPath?: string): string {
     path = constitutionPath;
   }
 
+  // Try package resources: works when __dirname is src/ or dist/cli/
   if (!path) {
-    const packageResourcePath = resolve(__dirname, "..", "resources", "CONSTITUTION_v1.md");
-    if (existsSync(packageResourcePath)) path = packageResourcePath;
+    const fromSrc = resolve(__dirname, "..", "resources", "CONSTITUTION_v1.md");
+    if (existsSync(fromSrc)) path = fromSrc;
   }
   if (!path) {
-    const repoRoot = resolve(__dirname, "..", "..", "..");
+    const fromDistCli = resolve(__dirname, "..", "..", "resources", "CONSTITUTION_v1.md");
+    if (existsSync(fromDistCli)) path = fromDistCli;
+  }
+  // Repo root fallbacks (when run from bin/pact-verifier.mjs, cwd is repo root; __dirname is dist/cli so repo root = __dirname/../../..)
+  if (!path) {
+    const repoRoot = resolve(__dirname, "..", "..", "..", "..");
     const mono = join(repoRoot, "packages", "verifier", "resources", "CONSTITUTION_v1.md");
     if (existsSync(mono)) path = mono;
     else {

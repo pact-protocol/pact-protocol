@@ -22,8 +22,61 @@ const REQUIRED_FILES = [
   "derived/gc_view.json",
   "derived/judgment.json",
   "derived/insurer_summary.json",
-  "constitution/CONSTITUTION_v1.md",
 ];
+
+/** Expected constitution paths (primary first, optional fallbacks). Match against normalized names. */
+const CONSTITUTION_CANDIDATE_PATHS = [
+  "constitution/CONSTITUTION_v1.md",
+  "CONSTITUTION_v1.md",
+  "don/constitution/PACT_CONSTITUTION_V1.md",
+];
+
+/**
+ * Normalize a zip entry name for consistent lookup:
+ * - \ → /
+ * - strip leading ./
+ */
+function normalizeZipEntryName(name: string): string {
+  let n = name.replace(/\\/g, "/");
+  n = n.replace(/^\.\/+/, "");
+  return n;
+}
+
+/**
+ * Build a map from normalized entry name to zip file object (excludes directories).
+ */
+function buildNormalizedFileMap(zip: JSZip): Map<string, JSZip.JSZipObject> {
+  const map = new Map<string, JSZip.JSZipObject>();
+  zip.forEach((relativePath, file) => {
+    if (file.dir) return;
+    const normalized = normalizeZipEntryName(relativePath);
+    map.set(normalized, file);
+  });
+  return map;
+}
+
+function getFileByNormalizedName(
+  map: Map<string, JSZip.JSZipObject>,
+  path: string
+): JSZip.JSZipObject | undefined {
+  return map.get(normalizeZipEntryName(path));
+}
+
+function getConstitutionFile(
+  map: Map<string, JSZip.JSZipObject>
+): JSZip.JSZipObject | undefined {
+  for (const candidate of CONSTITUTION_CANDIDATE_PATHS) {
+    const normalized = normalizeZipEntryName(candidate);
+    const file = map.get(normalized);
+    if (file) return file;
+  }
+  return undefined;
+}
+
+/** Exported for use by insurer_summary and other callers that read constitution from a zip. */
+export function findConstitutionInZip(zip: JSZip): JSZip.JSZipObject | undefined {
+  return getConstitutionFile(buildNormalizedFileMap(zip));
+}
 
 export interface VerifyReport {
   version: string;
@@ -72,17 +125,29 @@ export async function verifyAuditorPackFromBytes(
 
   try {
     const zip = await JSZip.loadAsync(zipBytes);
+    const fileMap = buildNormalizedFileMap(zip);
 
     const missingFiles: string[] = [];
     for (const requiredFile of REQUIRED_FILES) {
-      if (!zip.file(requiredFile)) missingFiles.push(requiredFile);
+      if (!getFileByNormalizedName(fileMap, requiredFile)) missingFiles.push(requiredFile);
+    }
+    const constitutionFile = getConstitutionFile(fileMap);
+    if (!constitutionFile) {
+      const normalizedNames = Array.from(fileMap.keys());
+      const sample = normalizedNames.slice(0, 30);
+      report.mismatches.push(
+        `Missing constitution in ZIP. Expected (in order): ${CONSTITUTION_CANDIDATE_PATHS.join(", ")}. ZIP entry names (first ${sample.length}): ${sample.join(", ") || "(none)"}`
+      );
     }
     if (missingFiles.length > 0) {
       report.mismatches.push(`Missing required files: ${missingFiles.join(", ")}`);
+    }
+    if (missingFiles.length > 0 || !constitutionFile) {
       return report;
     }
 
-    const checksumsContent = await zip.file("checksums.sha256")!.async("string");
+    const checksumsFile = getFileByNormalizedName(fileMap, "checksums.sha256")!;
+    const checksumsContent = await checksumsFile.async("string");
     const checksumLines = checksumsContent.trim().split("\n");
     const checksumMismatches: string[] = [];
     for (const line of checksumLines) {
@@ -92,23 +157,24 @@ export async function verifyAuditorPackFromBytes(
         continue;
       }
       const [, expectedHash, relativePath] = match;
-      const file = zip.file(relativePath);
+      const file = getFileByNormalizedName(fileMap, relativePath.trim());
       if (!file) {
-        checksumMismatches.push(`File in checksums not found in ZIP: ${relativePath}`);
+        checksumMismatches.push(`File in checksums not found in ZIP: ${relativePath.trim()}`);
         continue;
       }
       const fileContent = await file.async("uint8array");
       const actualHash = await sha256Async(fileContent);
       if (actualHash !== expectedHash) {
         checksumMismatches.push(
-          `Checksum mismatch for ${relativePath}: expected ${expectedHash.substring(0, 16)}..., got ${actualHash.substring(0, 16)}...`
+          `Checksum mismatch for ${relativePath.trim()}: expected ${expectedHash.substring(0, 16)}..., got ${actualHash.substring(0, 16)}...`
         );
       }
     }
     report.checksums_ok = checksumMismatches.length === 0;
     if (!report.checksums_ok) report.mismatches.push(...checksumMismatches);
 
-    const manifestContent = await zip.file("manifest.json")!.async("string");
+    const manifestFile = getFileByNormalizedName(fileMap, "manifest.json")!;
+    const manifestContent = await manifestFile.async("string");
     const manifest = JSON.parse(manifestContent);
     if (!manifest.constitution_version) {
       report.mismatches.push("Missing constitution_version in manifest.json");
@@ -119,11 +185,6 @@ export async function verifyAuditorPackFromBytes(
       return report;
     }
 
-    const constitutionFile = zip.file("constitution/CONSTITUTION_v1.md");
-    if (!constitutionFile) {
-      report.mismatches.push("Missing constitution/CONSTITUTION_v1.md in ZIP");
-      return report;
-    }
     const packConstitutionContent = await constitutionFile.async("string");
     const canonicalPackConstitution = canonicalizeConstitution(packConstitutionContent);
     const computedConstitutionHash = await sha256Async(canonicalPackConstitution);
@@ -141,7 +202,8 @@ export async function verifyAuditorPackFromBytes(
       }
     }
 
-    const transcriptContent = await zip.file("input/transcript.json")!.async("string");
+    const transcriptFile = getFileByNormalizedName(fileMap, "input/transcript.json")!;
+    const transcriptContent = await transcriptFile.async("string");
     const transcript: TranscriptV4 = JSON.parse(transcriptContent);
 
     const sha256AsyncStr: (s: string) => Promise<string> = (s) => sha256Async(s);
@@ -181,7 +243,8 @@ export async function verifyAuditorPackFromBytes(
       );
     }
 
-    const originalGcViewContent = await zip.file("derived/gc_view.json")!.async("string");
+    const originalGcViewFile = getFileByNormalizedName(fileMap, "derived/gc_view.json")!;
+    const originalGcViewContent = await originalGcViewFile.async("string");
     let strippedRecomputedGcView = stripNondeterministic(recomputedGcView as unknown as Record<string, unknown>, "gc_view");
     let strippedOriginalGcView = stripNondeterministic(JSON.parse(originalGcViewContent), "gc_view");
     if (allowNonstandard) {
@@ -206,7 +269,8 @@ export async function verifyAuditorPackFromBytes(
       );
     }
 
-    const originalJudgmentContent = await zip.file("derived/judgment.json")!.async("string");
+    const originalJudgmentFile = getFileByNormalizedName(fileMap, "derived/judgment.json")!;
+    const originalJudgmentContent = await originalJudgmentFile.async("string");
     const strippedRecomputedJudgment = stripNondeterministic(
       recomputedJudgment as unknown as Record<string, unknown>,
       "judgment"
@@ -223,7 +287,8 @@ export async function verifyAuditorPackFromBytes(
     }
 
     const recomputedInsurerSummary = await generateInsurerSummary(transcript, recomputedGcView, recomputedJudgment);
-    const originalInsurerSummaryContent = await zip.file("derived/insurer_summary.json")!.async("string");
+    const originalInsurerSummaryFile = getFileByNormalizedName(fileMap, "derived/insurer_summary.json")!;
+    const originalInsurerSummaryContent = await originalInsurerSummaryFile.async("string");
     const strippedRecomputedInsurerSummary = stripNondeterministic(
       recomputedInsurerSummary as unknown as Record<string, unknown>,
       "insurer_summary"
