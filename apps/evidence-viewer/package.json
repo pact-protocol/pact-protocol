@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node ../../node_modules/vite/bin/vite.js",
     "build": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit && node ../../node_modules/vite/bin/vite.js build",
-    "preview": "vite preview",
+    "preview": "node ../../node_modules/vite/bin/vite.js preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "test": "vitest run",
     "test:watch": "vitest"
