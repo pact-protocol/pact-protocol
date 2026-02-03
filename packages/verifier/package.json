@@ -42,7 +42,8 @@
     "contention:scan": "pnpm run build >&2 && node dist/cli/contention_scan.js",
     "contention:scan:raw": "node dist/cli/contention_scan.js",
     "test": "pnpm run build && node ../../node_modules/vitest/vitest.mjs run",
-    "test:watch": "node ../../node_modules/vitest/vitest.mjs watch"
+    "test:watch": "node ../../node_modules/vitest/vitest.mjs watch",
+    "record:freeze": "FREEZE_RECORD=1 pnpm test -- run freeze_protection"
   },
   "dependencies": {
     "bs58": "^5.0.0",
