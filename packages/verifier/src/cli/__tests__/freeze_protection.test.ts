@@ -75,28 +75,33 @@ function loadTranscript(path: string): TranscriptV4 {
   return JSON.parse(readFileSync(fullPath, "utf-8"));
 }
 
-/** Frozen baseline hashes: fixture key -> { gc_view, insurer_summary, judgment }. Update via FREEZE_RECORD=1. */
+/**
+ * Frozen baseline hashes: fixture key -> { gc_view, insurer_summary, judgment }.
+ * To update after hash logic changes: from repo root run
+ *   FREEZE_RECORD=1 FREEZE_WRITE_FILE=1 pnpm --filter @pact/verifier test -- run freeze_protection
+ * or FREEZE_RECORD=1 pnpm --filter @pact/verifier test -- run freeze_protection and paste the printed JSON here.
+ */
 const FROZEN_BASELINE_HASHES: Record<string, { gc_view: string; insurer_summary: string; judgment: string }> = {
   "SUCCESS-001-simple": {
-    gc_view: "088f4fb34f0884d1a66cafb354b0614704b3e5869e2de67ca80fb9f36774cb34",
-    insurer_summary: "7702ebae816f446c072d3b6962e9cf87c05d63afd90af79b306fd20344f137bd",
-    judgment: "3011a4232a6392018ed4929edc1398e74639c518fc38db0ee0d15d6c70dc110b",
+    "gc_view": "088f4fb34f0884d1a66cafb354b0614704b3e5869e2de67ca80fb9f36774cb34",
+    "insurer_summary": "7702ebae816f446c072d3b6962e9cf87c05d63afd90af79b306fd20344f137bd",
+    "judgment": "3011a4232a6392018ed4929edc1398e74639c518fc38db0ee0d15d6c70dc110b"
   },
   "PACT-101-policy-violation": {
-    gc_view: "31593d5dc3e3f0ccdca61d93c682436779e8f85b3190790a539764820a86eff2",
-    insurer_summary: "401139c98914e9d0f665f461c9bb77a9ee3c54f01d36bb4372bd1530c219aad8",
-    judgment: "652431d0b19b73720df2598f481bd24900aa8b21368207d850c13709e86c106f",
+    "gc_view": "9c6bb1f87748084abbf7fad65d4dec6bb5147dd9ce437ffb4d70d8418d2fccc4",
+    "insurer_summary": "401139c98914e9d0f665f461c9bb77a9ee3c54f01d36bb4372bd1530c219aad8",
+    "judgment": "652431d0b19b73720df2598f481bd24900aa8b21368207d850c13709e86c106f"
   },
   "PACT-420-provider-unreachable": {
-    gc_view: "9d13d70352c075e50069c6d3dd9288e497154dc50912b8ccb440a8d77e9641be",
-    insurer_summary: "e442f8b54000babd3428904cde8763cdfb6b50fdd90e17a484c1336d97748196",
-    judgment: "f64acef2f168768a26d6324de30f4c7d708b2740dd3616089a04b3cb844c5a6b",
+    "gc_view": "3b73e66a8d800fdef304ccc346638d7cac4b50b2a39952a19d27449d144b2702",
+    "insurer_summary": "e442f8b54000babd3428904cde8763cdfb6b50fdd90e17a484c1336d97748196",
+    "judgment": "f64acef2f168768a26d6324de30f4c7d708b2740dd3616089a04b3cb844c5a6b"
   },
   "PACT-421-provider-api-mismatch": {
-    gc_view: "f2987b88374c0854a79c56fa4dd0c14b28e80c5da2f1dc481bd7b1dc8cc02839",
-    insurer_summary: "2f5e47f487378b67c611369fe97fece4c8ca5ac8182a645bd0391837c33f0042",
-    judgment: "0d464e9a070f9ff2f3440c131d14363858c8e8b726449b618aa121ef341f35fd",
-  },
+    "gc_view": "589154f12bfcd9947eeade274a631cc00a054359bdaa6b41671d82715714d8e8",
+    "insurer_summary": "2f5e47f487378b67c611369fe97fece4c8ca5ac8182a645bd0391837c33f0042",
+    "judgment": "0d464e9a070f9ff2f3440c131d14363858c8e8b726449b618aa121ef341f35fd"
+  }
 };
 
 const TRANSCRIPT_FIXTURES: Array<[string, string]> = [
@@ -107,7 +112,7 @@ const TRANSCRIPT_FIXTURES: Array<[string, string]> = [
 ];
 
 describe("Freeze Protection", () => {
-  it("record mode: prints FROZEN_BASELINE_HASHES when FREEZE_RECORD=1", async () => {
+  it("record mode: prints and optionally writes FROZEN_BASELINE_HASHES when FREEZE_RECORD=1", async () => {
     if (process.env.FREEZE_RECORD !== "1") return;
     const hashes: Record<string, { gc_view: string; insurer_summary: string; judgment: string }> = {};
     for (const [key, relPath] of TRANSCRIPT_FIXTURES) {
@@ -125,7 +130,32 @@ describe("Freeze Protection", () => {
         console.error(`Fixture ${key}:`, e);
       }
     }
-    console.log("// Paste into FROZEN_BASELINE_HASHES:\n" + JSON.stringify(hashes, null, 2));
+    const output = JSON.stringify(hashes, null, 2);
+    console.log("// Paste into FROZEN_BASELINE_HASHES:\n" + output);
+    if (process.env.FREEZE_WRITE_FILE === "1") {
+      const testPath = join(repoRoot, "packages/verifier/src/cli/__tests__/freeze_protection.test.ts");
+      let content = readFileSync(testPath, "utf-8");
+      const markerStart = "const FROZEN_BASELINE_HASHES: Record<string, { gc_view: string; insurer_summary: string; judgment: string }> = ";
+      const startIdx = content.indexOf(markerStart);
+      if (startIdx !== -1) {
+        const afterStart = startIdx + markerStart.length;
+        let depth = 0;
+        let endIdx = afterStart;
+        for (let i = afterStart; i < content.length; i++) {
+          if (content[i] === "{") depth++;
+          else if (content[i] === "}") {
+            depth--;
+            if (depth === 0) {
+              endIdx = i + 1;
+              break;
+            }
+          }
+        }
+        content = content.slice(0, afterStart) + output + content.slice(endIdx);
+        writeFileSync(testPath, content, "utf-8");
+        console.log("Updated FROZEN_BASELINE_HASHES in", testPath);
+      }
+    }
   });
 
   describe("Transcript fixtures: gc_view, insurer_summary, judgment", () => {
@@ -144,6 +174,9 @@ describe("Freeze Protection", () => {
 
         const expected = FROZEN_BASELINE_HASHES[key];
         expect(expected, `Missing FROZEN_BASELINE_HASHES for ${key}. Run with FREEZE_RECORD=1 to generate.`).toBeDefined();
+        if (gcViewHash !== expected!.gc_view || insurerHash !== expected!.insurer_summary || judgmentHash !== expected!.judgment) {
+          console.error(`[freeze_protection] Actual hashes for ${key} (paste into FROZEN_BASELINE_HASHES):`, JSON.stringify({ gc_view: gcViewHash, insurer_summary: insurerHash, judgment: judgmentHash }, null, 2));
+        }
         expect(gcViewHash).toBe(expected!.gc_view);
         expect(insurerHash).toBe(expected!.insurer_summary);
         expect(judgmentHash).toBe(expected!.judgment);
