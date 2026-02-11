@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 pnpm -C packages/verifier build >/dev/null
+pnpm -C packages/boxer build >/dev/null 2>&1 || true
 #
 # Design Partner Bundle - Verification Script
 #
@@ -17,6 +18,7 @@ pnpm -C packages/verifier build >/dev/null
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PACKS_DIR="$SCRIPT_DIR/packs"
 VERIFIER_TGZ="$SCRIPT_DIR/verifier/pact-verifier-0.2.0.tgz"
 
@@ -156,15 +158,95 @@ if [ -d "$DEMO_DIR" ]; then
   done
 fi
 
+# Sync canonical packs into viewer so demo dropdown loads from public/packs only
+if [ -f "$SCRIPT_DIR/scripts/sync_viewer_packs.sh" ]; then
+  echo ""
+  echo "Syncing viewer packs (canonical -> apps/evidence-viewer/public/packs)..."
+  REPO_ROOT="$REPO_ROOT" bash "$SCRIPT_DIR/scripts/sync_viewer_packs.sh"
+fi
+
+# Boxer recompute: art pack + anchors -> snapshot with anchor badges
+if [ -f "$REPO_ROOT/packages/boxer/dist/cli/recompute.js" ]; then
+  ART_PACK="$PACKS_DIR/auditor_pack_art_success.zip"
+  ART_ANCHORS="$REPO_ROOT/fixtures/anchors/art_anchors.json"
+  BOXER_ART_SNAPSHOT="/tmp/passport_art_v0_4.json"
+  if [ -f "$ART_PACK" ] && [ -f "$ART_ANCHORS" ]; then
+    echo ""
+    echo "Boxer recompute (art pack + anchors)..."
+    echo ""
+    node "$REPO_ROOT/packages/boxer/dist/cli/recompute.js" \
+      --pack "$ART_PACK" --anchors "$ART_ANCHORS" --out "$BOXER_ART_SNAPSHOT" 2>/dev/null || true
+    if [ -f "$BOXER_ART_SNAPSHOT" ]; then
+      ANCHOR_COUNT=$(jq '[.entities[]? | select((.anchors | length) > 0)] | length' "$BOXER_ART_SNAPSHOT" 2>/dev/null || echo "0")
+      if [ "${ANCHOR_COUNT:-0}" -ge 1 ]; then
+        echo "  ✓ PASS: Boxer art snapshot has entities with anchor badges (count=$ANCHOR_COUNT)"
+        PASSED=$((PASSED + 1))
+      else
+        echo "  ❌ FAIL: Boxer art snapshot missing anchor badges"
+        FAILED=$((FAILED + 1))
+      fi
+    else
+      echo "  ❌ FAIL: Boxer did not produce $BOXER_ART_SNAPSHOT"
+      FAILED=$((FAILED + 1))
+    fi
+  fi
+
+  # Boxer recompute: API pack + anchors -> snapshot with Provider B KYB badge
+  API_PACK="$PACKS_DIR/auditor_pack_api_success.zip"
+  API_ANCHORS="$REPO_ROOT/fixtures/anchors/api_anchors.json"
+  BOXER_API_SNAPSHOT="/tmp/passport_api_v0_4.json"
+  if [ -f "$API_PACK" ] && [ -f "$API_ANCHORS" ]; then
+    echo ""
+    echo "Boxer recompute (API pack + anchors)..."
+    echo ""
+    node "$REPO_ROOT/packages/boxer/dist/cli/recompute.js" \
+      --pack "$API_PACK" --anchors "$API_ANCHORS" --out "$BOXER_API_SNAPSHOT" 2>/dev/null || true
+    if [ -f "$BOXER_API_SNAPSHOT" ]; then
+      PROVIDER_B_KYB=$(jq '[.entities[]? | select(.signer_public_key_b58 == "CACXbtJrzCQqTJ3Ms5EYjgmd4xccVm6uADUYLHZuMYLx") | .anchors[]? | select(.type == "kyb_verified")] | length' "$BOXER_API_SNAPSHOT" 2>/dev/null || echo "0")
+      if [ "${PROVIDER_B_KYB:-0}" -ge 1 ]; then
+        echo "  ✓ PASS: Boxer API snapshot has Provider B KYB badge"
+        PASSED=$((PASSED + 1))
+      else
+        echo "  ❌ FAIL: Boxer API snapshot missing Provider B KYB badge"
+        FAILED=$((FAILED + 1))
+      fi
+    else
+      echo "  ❌ FAIL: Boxer did not produce $BOXER_API_SNAPSHOT"
+      FAILED=$((FAILED + 1))
+    fi
+  fi
+else
+  if [ -f "$PACKS_DIR/auditor_pack_art_success.zip" ] || [ -f "$PACKS_DIR/auditor_pack_api_success.zip" ]; then
+    echo ""
+    echo "  ⚠️  Skip: Boxer not built (pnpm -C packages/boxer build)"
+  fi
+fi
+
+# Smoke: precomputed revoked snapshot has revoked anchor and revocation recommendation
+REVOKED_SNAPSHOT="$SCRIPT_DIR/fixtures/snapshots/passport_api_revoked.json"
+if [ -f "$REVOKED_SNAPSHOT" ]; then
+  echo ""
+  echo "Smoke: revoked snapshot (viewer warning expected)..."
+  REVOKED_ANCHORS=$(jq '[.entities[]?.anchors[]? | select(.revoked == true)] | length' "$REVOKED_SNAPSHOT" 2>/dev/null || echo "0")
+  REVOKED_REC=$(jq '[.recommendations[]? | select(.type == "avoid_revoked_identity" or .type == "revocation_warning")] | length' "$REVOKED_SNAPSHOT" 2>/dev/null || echo "0")
+  if [ "${REVOKED_ANCHORS:-0}" -ge 1 ] && [ "${REVOKED_REC:-0}" -ge 1 ]; then
+    echo "  ✓ PASS: revoked snapshot has revoked anchor(s) and revocation recommendation (viewer will show warning)"
+    PASSED=$((PASSED + 1))
+  else
+    echo "  ❌ FAIL: revoked snapshot missing revoked anchor or recommendation (revoked_anchors=$REVOKED_ANCHORS, recs=$REVOKED_REC)"
+    FAILED=$((FAILED + 1))
+  fi
+fi
+
 echo ""
 echo "═══════════════════════════════════════════════════════════"
 
 if [ "$FAILED" -eq 0 ]; then
-  echo "  ✅ All $PASSED packs verified successfully!"
+  echo "  ✅ All $PASSED checks passed!"
   echo "═══════════════════════════════════════════════════════════"
   exit 0
 else
-  echo "  ❌ $FAILED pack(s) failed verification, $PASSED passed"
+  echo "  ❌ $FAILED check(s) failed, $PASSED passed"
   echo "═══════════════════════════════════════════════════════════"
   exit 1
 fi

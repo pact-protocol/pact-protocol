@@ -82,8 +82,10 @@ export default function AttachmentsDropZone({
 
   return (
     <div className="attachments-drop-zone">
-      <h4 className="attachments-title">Drop in documents</h4>
-      <p className="attachments-hint">Attach supporting documents (PDF, images, text) to include in the Claims Intake Package.</p>
+      <h4 className="attachments-title">Not part of original evidence</h4>
+      <p className="attachments-hint">
+        Included only in the Claims Intake Package. PDFs, images, text accepted.
+      </p>
       <div
         className="attachments-drop-area"
         onDrop={handleDrop}

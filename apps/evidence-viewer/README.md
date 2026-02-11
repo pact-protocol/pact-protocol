@@ -45,6 +45,8 @@ pnpm --filter @pact/evidence-viewer dev
 
 Open the URL Vite prints (e.g. http://localhost:5173) in your browser.
 
+**Optional: Anchor onboarding link** — In the Passport modal (Identity section), when no snapshot is loaded or the party has no anchors, a short note explains that identity attestation is set up during onboarding (not after a transaction) and links to Anchor onboarding. Set `VITE_ANCHOR_ONBOARDING_URL` (e.g. in `.env`) to that URL; if unset, the link is hidden. Copy `apps/evidence-viewer/.env.example` to `.env` and fill in the onboarding URL.
+
 Minimal (viewer only, after verifier is built):
 
 ```bash
@@ -97,6 +99,28 @@ All changes in this app are **viewer-only**.
 - **Lazy-loaded heavy libs**: jsPDF and JSZip are loaded only when needed (first export, first pack load, or first file download). This keeps the initial bundle smaller and improves first-load performance.
 - **No backend**: Fully client-side, no data leaves your browser
 - **Read-only**: No editing, no auth, no data storage
+
+## Production deployment
+
+The Evidence Viewer is a static SPA. Build and deploy the `dist/` output:
+
+```bash
+pnpm --filter @pact/evidence-viewer build
+# Deploy dist/ to your host (Vercel, Netlify, S3, etc.)
+```
+
+**Environment variables (build-time):**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_ANCHOR_ONBOARDING_URL` | (none) | URL of the Anchor Onboarding app. If unset, the "Manage anchors" link is hidden. |
+| `VITE_BASE_PATH` | `/` | Base path for subpath deployment (e.g. `/evidence-viewer/`). |
+
+**Subpath deployment:** Set `VITE_BASE_PATH=/your-path/` before building. Demo packs and asset paths will use this base.
+
+**Universal:** The viewer works with any valid Auditor Pack ZIP. No backend required; all processing is client-side. Gracefully handles missing or malformed data.
+
+---
 
 ## Acceptance Criteria
 

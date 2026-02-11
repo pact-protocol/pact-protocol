@@ -1,6 +1,7 @@
-/* Typography + spacing – single source of truth */
+/* Typography + spacing – aligned with pactprotocol.com */
 :root {
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-heading: 'Inter', var(--font-sans);
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Segoe UI Mono', 'Consolas', 'Courier New', monospace;
 
   --font-size-base: 15px;
@@ -38,13 +39,28 @@
   box-sizing: border-box;
 }
 
+/* Pact site typography: Inter throughout (same as pactprotocol.com) */
 body {
-  font-family: var(--font-sans);
+  font-family: var(--font-heading);
   font-size: var(--font-size-base);
   line-height: var(--line-height-base);
   letter-spacing: var(--letter-spacing);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4,
+.app-header h1,
+.read-only-frame-title,
+.panel h3,
+.verdict-header .verdict-fault,
+.demo-label,
+.collapsible-section-heading,
+.hero-title,
+.passport-box-title,
+.trust-signals-box h3 {
+  font-family: var(--font-heading);
+  font-weight: 600;
 }
 
 /* Inline code / IDs – single style for all code blocks */

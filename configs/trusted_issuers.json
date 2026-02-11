@@ -1,0 +1,9 @@
+{
+  "issuers": [
+    {
+      "issuer_public_key_b58": "PLACEHOLDER_REPLACE_WITH_REGISTRY_PUBLIC_KEY",
+      "name": "Pact Registry (dev)",
+      "scopes": ["kyb_verified", "credential_verified", "platform_verified", "service_account_verified", "domain_verified", "oidc_verified"]
+    }
+  ]
+}

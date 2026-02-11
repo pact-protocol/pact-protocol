@@ -26,6 +26,7 @@ No agents run here. No payments happen here.
 
 - **Verifier (CLI)** — Transcript verification, DBL blame resolution, GC view, insurer summary
 - **Passport recompute** — Deterministic credit / reputation state from transcripts
+- **Boxer** — Passport snapshot (trust signals): derived identity badges, domain metrics, and recommendations from packs + anchors; used by the Evidence Viewer and design-partner demos. See [docs/BOXER.md](docs/BOXER.md) and [packages/boxer/README.md](packages/boxer/README.md).
 - **Auditor packs** — Sealed evidence bundles (success, failure, tier demos)
 - **Constitution enforcement** — Rules of evidence and responsibility attribution
 

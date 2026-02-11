@@ -12,22 +12,33 @@ interface DemoPackLoaderProps {
  *  - Timeout 420: FAILED_PROVIDER_UNREACHABLE, PROVIDER_AT_FAULT, Integrity VALID
  *  - Tamper: Integrity TAMPERED (ok=false, recompute_ok=false)
  */
-const DEMO_PACKS = [
-  { id: '', label: 'Choose a demo pack...', path: '', filename: '' },
-  { id: 'success', label: 'Success', path: 'packs/auditor_pack_success.zip', filename: 'auditor_pack_success.zip' },
-  { id: '101', label: 'Policy Abort 101', path: 'packs/auditor_pack_101.zip', filename: 'auditor_pack_101.zip' },
-  { id: '420', label: 'Timeout 420', path: 'packs/auditor_pack_420.zip', filename: 'auditor_pack_420.zip' },
-  { id: 'tamper', label: 'Tamper', path: 'packs/auditor_pack_semantic_tampered.zip', filename: 'auditor_pack_semantic_tampered.zip' },
-] as const;
+type DemoPack = {
+  id: string;
+  label: string;
+  description: string;
+  path: string;
+  filename: string;
+};
+
+const QUICK_DEMOS: DemoPack[] = [
+  { id: 'success', label: 'Success', description: 'Completed deal, no fault.', path: 'packs/auditor_pack_success.zip', filename: 'auditor_pack_success.zip' },
+  { id: '101', label: 'Policy Abort 101', description: 'Policy violation, buyer at fault.', path: 'packs/auditor_pack_101.zip', filename: 'auditor_pack_101.zip' },
+  { id: '420', label: 'Timeout 420', description: 'Provider unreachable.', path: 'packs/auditor_pack_420.zip', filename: 'auditor_pack_420.zip' },
+  { id: 'tamper', label: 'Tamper', description: 'Tampered evidence bundle.', path: 'packs/auditor_pack_semantic_tampered.zip', filename: 'auditor_pack_semantic_tampered.zip' },
+];
+
+const PILOT_DEMOS: DemoPack[] = [
+  { id: 'art', label: 'Art Acquisition (Success)', description: 'Art acquisition with evidence and economic terms.', path: 'packs/auditor_pack_art_success.zip', filename: 'auditor_pack_art_success.zip' },
+  { id: 'api', label: 'Autonomous API Procurement (Success)', description: 'API procurement with trust gate and economic terms.', path: 'packs/auditor_pack_api_success.zip', filename: 'auditor_pack_api_success.zip' },
+];
 
 export default function DemoPackLoader({ onLoadPack, isLoading, onError }: DemoPackLoaderProps) {
-  const handleChange = useCallback(
-    async (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const id = e.target.value;
-      const demo = DEMO_PACKS.find((d) => d.id === id);
-      if (!demo || !demo.path) return;
+  const loadDemo = useCallback(
+    async (demo: DemoPack) => {
       try {
-        const res = await fetch(`/${demo.path}`);
+        const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '') || '';
+        const url = `${base}/${demo.path}`.replace(/\/+/g, '/');
+        const res = await fetch(url);
         if (!res.ok) throw new Error(`Failed to fetch ${demo.filename}`);
         const blob = await res.blob();
         const file = new File([blob], demo.filename, { type: 'application/zip' });
@@ -35,8 +46,6 @@ export default function DemoPackLoader({ onLoadPack, isLoading, onError }: DemoP
       } catch (err) {
         console.error(err);
         onError?.(err instanceof Error ? err.message : 'Failed to load demo pack');
-      } finally {
-        e.target.value = '';
       }
     },
     [onLoadPack, onError]
@@ -44,22 +53,40 @@ export default function DemoPackLoader({ onLoadPack, isLoading, onError }: DemoP
 
   return (
     <div className="demo-pack-loader">
-      <label htmlFor="demo-select" className="demo-label">
-        Select a demo pack
-      </label>
-      <select
-        id="demo-select"
-        className="demo-select"
-        onChange={handleChange}
-        disabled={isLoading}
-        value=""
-      >
-        {DEMO_PACKS.map((d) => (
-          <option key={d.id || 'placeholder'} value={d.id} disabled={!d.path}>
-            {d.label}
-          </option>
-        ))}
-      </select>
+      <div className="demo-pack-row">
+        <span className="demo-label">Quick demos</span>
+        <div className="demo-pack-buttons">
+          {QUICK_DEMOS.map((d) => (
+            <button
+              key={d.id}
+              type="button"
+              className="demo-pack-btn"
+              onClick={() => loadDemo(d)}
+              disabled={isLoading}
+            >
+              <span className="demo-pack-btn-name">{d.label}</span>
+              <span className="demo-pack-btn-desc">{d.description}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="demo-pack-row">
+        <span className="demo-label">Pilots</span>
+        <div className="demo-pack-buttons">
+          {PILOT_DEMOS.map((d) => (
+            <button
+              key={d.id}
+              type="button"
+              className="demo-pack-btn"
+              onClick={() => loadDemo(d)}
+              disabled={isLoading}
+            >
+              <span className="demo-pack-btn-name">{d.label}</span>
+              <span className="demo-pack-btn-desc">{d.description}</span>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

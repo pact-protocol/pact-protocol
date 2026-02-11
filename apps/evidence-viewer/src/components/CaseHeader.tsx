@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { Manifest, GCView } from '../types';
+import { badgeToneToCssClass, getOutcomeBadgeStyle } from '../lib/badgeSemantics';
 
 interface CaseHeaderProps {
   manifest: Manifest;
@@ -38,8 +39,7 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
 export default function CaseHeader({ manifest, gcView, transcriptId, packVerifyResult }: CaseHeaderProps) {
   const constitutionHash = manifest.constitution_hash ?? gcView.constitution?.hash ?? '—';
   const status = gcView.executive_summary?.status ?? '—';
-  const statusClass =
-    status === 'COMPLETED' ? 'status-good' : status.startsWith('FAILED') || status.includes('TAMPERED') ? 'status-bad' : 'status-warn';
+  const statusClass = badgeToneToCssClass(getOutcomeBadgeStyle(status));
 
   // Prefer verifier result (current run); fallback to manifest. Do not use stale derived JSON.
   const toolVersion =

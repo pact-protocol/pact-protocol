@@ -1,9 +1,9 @@
 # Demo Packs (fixtures)
 
-**These are fixtures for the Evidence Viewer demo.** The `.zip` files in this directory are **not committed** to the repo. The canonical source is `design_partner_bundle/packs/` (and `design_partner_bundle/demo/h5-golden/tamper/` for semantic warning pack).
+**These are fixtures for the Evidence Viewer demo.** The viewer demo dropdown loads **only** from this directory (`apps/evidence-viewer/public/packs/`). The canonical source is `design_partner_bundle/packs/` (and `design_partner_bundle/demo/h5-golden/tamper/` for the tamper pack).
 
-- **Load Demo Pack** dropdown: fetches `/packs/<filename>`. To enable it, copy packs here (see below).
-- **Drag-drop or design_partner_bundle**: you can always load packs from `design_partner_bundle/packs/` by opening that folder and dragging a `.zip` into the viewer.
+- **Sync:** Run `./design_partner_bundle/verify_all.sh` from repo root; it runs `design_partner_bundle/scripts/sync_viewer_packs.sh` to copy all canonical packs here. No manual copy needed for the standard demo.
+- **Drag-drop:** You can also load packs by dragging a `.zip` from `design_partner_bundle/packs/` into the viewer.
 
 ## Canonical source
 

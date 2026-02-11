@@ -1,7 +1,11 @@
 import type { GCView } from '../types';
+import { badgeToneToCssClass, getOutcomeBadgeStyle } from '../lib/badgeSemantics';
+import { getMoneyMovedDisplay, MONEY_MOVED_UNTRUSTED_NOTE } from '../lib/moneyMovedDisplay';
+import type { IntegrityVerdictKind } from '../lib/integrityVerdict';
 
 interface OutcomePanelProps {
   gcView: GCView;
+  integrityVerdict?: IntegrityVerdictKind;
 }
 
 /**
@@ -33,19 +37,12 @@ function outcomeSentence(status: string | undefined): string {
   }
 }
 
-function moneyMovedLabel(moneyMoved: boolean | undefined): 'YES' | 'NO' | 'UNKNOWN' {
-  if (moneyMoved === true) return 'YES';
-  if (moneyMoved === false) return 'NO';
-  return 'UNKNOWN';
-}
-
-export default function OutcomePanel({ gcView }: OutcomePanelProps) {
+export default function OutcomePanel({ gcView, integrityVerdict }: OutcomePanelProps) {
   const es = gcView?.executive_summary;
 
   const status = es?.status ?? 'UNKNOWN';
-  const moneyMoved = es?.money_moved;
+  const moneyMovedDisplay = getMoneyMovedDisplay(integrityVerdict ?? 'VERIFIED', es?.money_moved);
   const sentence = outcomeSentence(status);
-  const moneyLabel = moneyMovedLabel(moneyMoved);
 
   return (
     <div className="outcome-panel panel">
@@ -58,12 +55,15 @@ export default function OutcomePanel({ gcView }: OutcomePanelProps) {
         <dt>Money Moved</dt>
         <dd>
           <span
-            className={
-              moneyLabel === 'YES' ? 'status-good' : moneyLabel === 'NO' ? 'status-bad' : 'status-warn'
-            }
+            className={badgeToneToCssClass(
+              moneyMovedDisplay.value === 'YES' ? 'good' : moneyMovedDisplay.value === 'NO' ? 'bad' : 'warn'
+            )}
           >
-            {moneyLabel}
+            {moneyMovedDisplay.value}
           </span>
+          {moneyMovedDisplay.showUntrustedNote && (
+            <p className="outcome-money-moved-untrusted-note" role="status">{MONEY_MOVED_UNTRUSTED_NOTE}</p>
+          )}
         </dd>
       </dl>
     </div>

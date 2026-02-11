@@ -1,0 +1,21 @@
+{
+  "name": "@pact/boxer",
+  "version": "0.1.0",
+  "description": "Pact reputation snapshot (passport v0) with domain mapping and anchor badges",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm run clean && pnpm exec tsup src/cli/recompute.ts --format esm --outDir dist/cli --tsconfig tsconfig.json --no-splitting",
+    "clean": "rm -rf dist",
+    "recompute": "node dist/cli/recompute.js",
+    "test": "pnpm exec vitest run"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}

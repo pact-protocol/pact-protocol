@@ -1,7 +1,7 @@
 import JSZip from "jszip";
 import { verifyAuditorPackFromBytes } from "@pact/verifier/core";
 import { STANDARD_CONSTITUTION } from "./standard_constitution";
-import type { AuditorPackData, IntegrityResult, Manifest, GCView, Judgment, InsurerSummary } from "../types";
+import type { AuditorPackData, IntegrityResult, Manifest, GCView, Judgment, InsurerSummary, PassportSnapshotView } from "../types";
 
 /** Canonical paths (preferred). */
 const CANONICAL = {
@@ -149,6 +149,30 @@ export async function loadPackFromFile(
   const judgment = JSON.parse(judgmentContent) as Judgment;
   const insurerSummary = JSON.parse(insurerSummaryContent) as InsurerSummary;
 
+  let boxerSnapshot: PassportSnapshotView | null = null;
+  const passportRes = getFile(map, "derived/passport_snapshot.json");
+  if (passportRes) {
+    try {
+      const passportContent = await passportRes.async("string");
+      boxerSnapshot = JSON.parse(passportContent) as PassportSnapshotView;
+    } catch {
+      // ignore
+    }
+  }
+  if (!boxerSnapshot && manifest.passport_snapshot && typeof manifest.passport_snapshot === "object") {
+    boxerSnapshot = manifest.passport_snapshot as PassportSnapshotView;
+  }
+
+  let outcomeEvents: string | undefined;
+  const outcomeEventsRes = getFile(map, "derived/outcome_events.json");
+  if (outcomeEventsRes) {
+    try {
+      outcomeEvents = await outcomeEventsRes.file.async("string");
+    } catch {
+      // ignore
+    }
+  }
+
   let transcriptId = manifest.transcript_id;
   try {
     const transcriptJson = JSON.parse(transcriptContent);
@@ -238,10 +262,12 @@ export async function loadPackFromFile(
     constitution: constitutionContent,
     transcript: transcriptContent,
     transcriptId,
+    outcomeEvents,
     zipFile: file,
     source,
     demoPublicPath,
     packVerifyResult,
     integrityResult,
+    boxerSnapshot: boxerSnapshot ?? undefined,
   };
 }

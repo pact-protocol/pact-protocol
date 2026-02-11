@@ -99,6 +99,14 @@ export interface InsurerSummary {
   /** Audit tier (informational only). Does not affect verification. */
   audit_tier?: 'T1' | 'T2' | 'T3';
   audit_sla?: string;
+  /** Economic terms from last ACCEPT (e.g. art.acquisition). */
+  economic_details?: {
+    asset?: string | null;
+    amount?: string | null;
+    from?: string | null;
+    to?: string | null;
+    settlement_rail?: string | null;
+  };
 }
 
 /** Optional Merkle digest (Evidence plane). Additive anchor only; not verification instead of PoN. Institution-grade: constitution_hash + optional signer/signature. */
@@ -166,6 +174,59 @@ export interface IntegrityResult {
   warnings: string[];
 }
 
+/** Passport/Boxer snapshot (e.g. manifest.passport_snapshot or derived/passport_snapshot.json). */
+export interface PassportSnapshotView {
+  version?: string;
+  scoring_version?: string;
+  generated_at_ms?: number;
+  source_manifest_hashes?: string[];
+  snapshot_id?: string;
+  entities?: PassportEntityView[];
+  /** Boxer-derived recommendations (e.g. avoid_revoked_identity, revocation_warning). */
+  recommendations?: Array<{ type?: string; message?: string; ref?: string; reason?: string; magnitude?: number }>;
+}
+
+export interface PassportEntityView {
+  entity_id?: string;
+  signer_public_key_b58?: string;
+  software_attestation?: {
+    agent_impl_id?: string;
+    agent_version?: string;
+    model_id?: string;
+    build_hash?: string;
+  };
+  domains?: PassportDomainView[];
+  /** Anchor badges (KYB, Credential, Domain, Stripe Verified, etc.) when present. */
+  anchors?: Array<{
+    anchor_id?: string;
+    issuer?: string;
+    type?: string;
+    display_name?: string;
+    verification_method?: string;
+    /** Optional payload (e.g. platform_verified stripe: platform, account_type, scope). */
+    payload?: Record<string, unknown>;
+    issued_at_ms?: number;
+    revoked?: boolean;
+    revoked_at_ms?: number | null;
+    reason?: string | null;
+    revocation_ref?: string | null;
+  }>;
+}
+
+export interface PassportDomainView {
+  domain_id?: string;
+  metrics?: {
+    reliability_score?: number;
+    calibration_score?: number | null;
+    variance_score?: number | null;
+    dispute_rate?: number;
+    outcome_negative_rate?: number;
+    freshness_score?: number;
+  };
+  counts?: Record<string, number>;
+  deltas?: Array<{ type?: string; ref?: string; magnitude?: number }>;
+}
+
 export interface AuditorPackData {
   manifest: Manifest;
   gcView: GCView;
@@ -175,6 +236,8 @@ export interface AuditorPackData {
   constitution: string;
   transcript?: string;
   transcriptId: string; // Extracted from transcript.json or fallback sources
+  /** Optional outcome events (derived/outcome_events.json) when present in pack. */
+  outcomeEvents?: string;
   zipFile?: File;
   /** Optional Merkle digest; present when pack was built with --merkle-digest */
   merkleDigest?: MerkleDigest;
@@ -192,6 +255,8 @@ export interface AuditorPackData {
   verifyPath?: string;
   /** Client-side integrity from pack contents (input/transcript.json hash chain, checksums, signatures). */
   integrityResult?: IntegrityResult;
+  /** Passport/Boxer snapshot when pack contains derived/passport_snapshot.json or manifest.passport_snapshot. */
+  boxerSnapshot?: PassportSnapshotView | null;
   /** Temporary debug info for INDETERMINATE (which step failed, found files, etc.). */
   integrityDebug?: {
     transcriptFound: boolean;

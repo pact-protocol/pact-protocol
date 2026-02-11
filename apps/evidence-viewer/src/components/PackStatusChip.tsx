@@ -1,4 +1,5 @@
 import type { AuditorPackData } from '../types';
+import { getIntegrityVerdict } from '../lib/integrityVerdict';
 
 interface PackStatusChipProps {
   fileName: string;
@@ -6,17 +7,18 @@ interface PackStatusChipProps {
 }
 
 export default function PackStatusChip({ fileName, packData }: PackStatusChipProps) {
-  const status = packData.integrityResult?.status ?? 'INDETERMINATE';
+  const verdict = getIntegrityVerdict(packData).verdict;
 
   const getStatusClass = () => {
-    if (status === 'VALID') return 'status-valid';
-    if (status === 'TAMPERED') return 'status-invalid';
+    if (verdict === 'VERIFIED') return 'status-valid';
+    if (verdict === 'TAMPERED' || verdict === 'INVALID') return 'status-invalid';
     return 'status-indeterminate';
   };
 
   const getBadgeLabel = () => {
-    if (status === 'VALID') return 'Valid';
-    if (status === 'TAMPERED') return 'Tampered';
+    if (verdict === 'VERIFIED') return 'Valid';
+    if (verdict === 'TAMPERED') return 'Tampered';
+    if (verdict === 'INVALID') return 'Invalid';
     return 'Indeterminate';
   };
 
@@ -27,8 +29,8 @@ export default function PackStatusChip({ fileName, packData }: PackStatusChipPro
       <span className={`chip-badge ${getStatusClass()}`}>
         {getBadgeLabel()}
       </span>
-      {status === 'TAMPERED' && (
-        <span className="chip-tamper-note status-invalid">Tamper detected</span>
+      {(verdict === 'TAMPERED' || verdict === 'INVALID') && (
+        <span className="chip-tamper-note status-invalid">Integrity failed</span>
       )}
       <span className="chip-filename">{displayName}</span>
     </div>

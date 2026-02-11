@@ -7,6 +7,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
+  // Base path for subpath deployment (e.g. /evidence-viewer/). Default '/' for root.
+  base: process.env.VITE_BASE_PATH || '/',
   resolve: {
     // Stub Node-only verifier modules so the browser bundle doesn't pull in node:fs/crypto/path/url.
     // Core path always passes transcript object and constitutionContent, so these are never called.

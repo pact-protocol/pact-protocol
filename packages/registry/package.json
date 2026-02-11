@@ -1,0 +1,36 @@
+{
+  "name": "@pact/registry",
+  "version": "0.1.0",
+  "description": "Pact Registry - Issue/Verify/Revoke Anchor Attestations (Identity Layer MVP)",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./src/index.ts",
+    "./verify": "./src/verify.ts"
+  },
+  "bin": {
+    "pact-registry": "./dist/cli.js"
+  },
+  "scripts": {
+    "gen:keys": "node scripts/gen_registry_keys.mjs",
+    "build": "pnpm run clean && pnpm exec tsup src/server.ts src/cli.ts src/verify.ts src/index.ts --format esm --outDir dist --tsconfig tsconfig.json",
+    "clean": "rm -rf dist",
+    "start": "node dist/server.js",
+    "dev": "pnpm exec tsx src/server.ts",
+    "cli": "node dist/cli.js",
+    "test": "pnpm exec vitest run"
+  },
+  "dependencies": {
+    "bs58": "^5.0.0",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.0",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}

@@ -1,0 +1,119 @@
+{
+  "transcript_version": "pact-transcript/4.0",
+  "transcript_id": "transcript-75135e14bb3d75d3c23058718dedb03f61b7c755413dcfc8b92d1dc6a35830fb",
+  "intent_id": "intent-api-001-autonomous-procurement",
+  "intent_type": "api.procurement",
+  "created_at_ms": 1700100000000,
+  "policy_hash": "bf8558362137e1e6df5da5e3831c1f6fb4fdbbb099e3d7ec8e0c43a21c1a112d",
+  "strategy_hash": "a69678ae66d9a7fe470bf2ea98f81f1a6d87d9f89147202830cc9792f9a22eee",
+  "identity_snapshot_hash": "07c03230ddd45a550fb27a02ce25d09a0c5803f588fc1622660402914635f2f2",
+  "rounds": [
+    {
+      "round_number": 0,
+      "round_type": "INTENT",
+      "message_hash": "d885a65d18686ae6d403135f92d3dbb9bcf75f9c2ecbbb94a3eff74e759bf01a",
+      "envelope_hash": "d885a65d18686ae6d403135f92d3dbb9bcf75f9c2ecbbb94a3eff74e759bf01a",
+      "signature": {
+        "signer_public_key_b58": "8ZaPoHZtaRRSCgbWyDAbBAjGv9h8kY8JYJpaVrZtnc97",
+        "signature_b58": "5eXzHuEcAvDtwNycaR9EUMhjBq323xCYNUooUs5mX9PwVHW8oxn78C7sfdd3JZv8u1ywwg4Wxhswf3nNU9HmjcwG",
+        "signed_at_ms": 1700100000000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1700100000000,
+      "previous_round_hash": "9d48b18d77741cde67cea3ae996529c0145b8e425f13e3758ac1c19e1ba5750e",
+      "agent_id": "buyer",
+      "public_key_b58": "8ZaPoHZtaRRSCgbWyDAbBAjGv9h8kY8JYJpaVrZtnc97",
+      "content_summary": {
+        "intent_type": "api.procurement",
+        "request": "weather data NYC, 24h hourly",
+        "budget_max": 20,
+        "sla": "latency <2s",
+        "min_reliability_gate": 80,
+        "min_calibration_gate": 70
+      },
+      "round_hash": "73e1128042ea102fce327ae6756b63604f58f563418fdd3c02edc0185b37da5f"
+    },
+    {
+      "round_number": 1,
+      "round_type": "ASK",
+      "message_hash": "12a95ef4cdda8aec91239d0caacf20dae762c257808682be208c19e975d2fbf3",
+      "envelope_hash": "12a95ef4cdda8aec91239d0caacf20dae762c257808682be208c19e975d2fbf3",
+      "signature": {
+        "signer_public_key_b58": "7RWoAd4rBZxsaRaR4PjrX6jbfC8hoT3CGyeVWkndF7rJ",
+        "signature_b58": "hWeMWv1Z2zqyJKkdNbwBtvUf7shoBJfqnqUT2EMNDZX1zsc8W3ebhAutUjzZFrW75ttr2R1VG1PCWwfvzkG6YFd",
+        "signed_at_ms": 1700100001000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1700100001000,
+      "previous_round_hash": "73e1128042ea102fce327ae6756b63604f58f563418fdd3c02edc0185b37da5f",
+      "agent_id": "provider_a",
+      "public_key_b58": "7RWoAd4rBZxsaRaR4PjrX6jbfC8hoT3CGyeVWkndF7rJ",
+      "content_summary": {
+        "quote": {
+          "price": 10,
+          "sla": "standard"
+        },
+        "availability": true,
+        "availability_conf": 0.9,
+        "estimated_latency_ms": 2500,
+        "reliability_score": 55,
+        "calibration_score": 60
+      },
+      "round_hash": "bf13ab76e011d5dcdc3ebc38a84508a7e2a5dcb7a9852eea5b3bf2b9c4873068"
+    },
+    {
+      "round_number": 2,
+      "round_type": "ASK",
+      "message_hash": "773a9c93754ff0c62c51a5b3b27c9dcf33770167d7deef8eda16d57232c3dfe9",
+      "envelope_hash": "773a9c93754ff0c62c51a5b3b27c9dcf33770167d7deef8eda16d57232c3dfe9",
+      "signature": {
+        "signer_public_key_b58": "CACXbtJrzCQqTJ3Ms5EYjgmd4xccVm6uADUYLHZuMYLx",
+        "signature_b58": "5KnPPntzREKjgzChMh8PugbHsEWLHYdL83fJmPLnQH269qgdEjWt2VjiRqx8cScaYhZocPp5ZBeNEqBCW8pW3ZDN",
+        "signed_at_ms": 1700100002000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1700100002000,
+      "previous_round_hash": "bf13ab76e011d5dcdc3ebc38a84508a7e2a5dcb7a9852eea5b3bf2b9c4873068",
+      "agent_id": "provider_b",
+      "public_key_b58": "CACXbtJrzCQqTJ3Ms5EYjgmd4xccVm6uADUYLHZuMYLx",
+      "content_summary": {
+        "quote": {
+          "price": 12,
+          "sla": "fast"
+        },
+        "availability": true,
+        "availability_conf": 0.9,
+        "estimated_latency_ms": 1200,
+        "reliability_score": 85,
+        "calibration_score": 78
+      },
+      "round_hash": "f86789d3d8d469ad4080a98cc53f8227073b16f20a4cc68628a0f20c96699ad0"
+    },
+    {
+      "round_number": 3,
+      "round_type": "ACCEPT",
+      "message_hash": "5d9f5343f20c95b1e89674ccf01dd8aa4048985ef8ce5ff022f3e0a680a7ff2c",
+      "envelope_hash": "5d9f5343f20c95b1e89674ccf01dd8aa4048985ef8ce5ff022f3e0a680a7ff2c",
+      "signature": {
+        "signer_public_key_b58": "8ZaPoHZtaRRSCgbWyDAbBAjGv9h8kY8JYJpaVrZtnc97",
+        "signature_b58": "hzdZany9FxH8HcwpLR8Xh9pkJGYiekq8h9WEmutMYUkpHcfCedHZeZKfA3xzjRAaapF1RFoBYX9u7HumLWHG529",
+        "signed_at_ms": 1700100003000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1700100003000,
+      "previous_round_hash": "f86789d3d8d469ad4080a98cc53f8227073b16f20a4cc68628a0f20c96699ad0",
+      "agent_id": "buyer",
+      "public_key_b58": "8ZaPoHZtaRRSCgbWyDAbBAjGv9h8kY8JYJpaVrZtnc97",
+      "content_summary": {
+        "selected_provider": "CACXbtJrzCQqTJ3Ms5EYjgmd4xccVm6uADUYLHZuMYLx",
+        "asset": "USD",
+        "amount": 12,
+        "from": "8ZaPoHZtaRRSCgbWyDAbBAjGv9h8kY8JYJpaVrZtnc97",
+        "to": "CACXbtJrzCQqTJ3Ms5EYjgmd4xccVm6uADUYLHZuMYLx",
+        "settlement_rail": "stripe_like"
+      },
+      "round_hash": "c485ab79f69d3f87080cf87e5630fad9c3530d0499983c60bd15e262505a3c70"
+    }
+  ],
+  "final_hash": "610a8c9d95e8c916a84da7d7591ef378b77a4c58dd1ab863ef10ead5be783618"
+}

@@ -1,0 +1,26 @@
+{
+  "version": "anchors/1.0",
+  "scope": "art_acquisition_pilot_v0_4",
+  "anchors": [
+    {
+      "signer_public_key_b58": "DCi6DFQteG5nfh8WDDTxYsd7yoeB7bJiYErgohRaaUgA",
+      "anchor_type": "kyb_verified",
+      "label": "Gallery/Seller"
+    },
+    {
+      "signer_public_key_b58": "H2eeyMqhkLw1q7k1kuLJS5WCxv66w6yNYsTpvxPmTyTG",
+      "anchor_type": "credential_verified",
+      "label": "Human Expert A"
+    },
+    {
+      "signer_public_key_b58": "7vqQqT3Ds9WfM3T8PGEDkwgqu9qV8733HBVcj4Ee8y88",
+      "anchor_type": "credential_verified",
+      "label": "Human Expert B"
+    },
+    {
+      "signer_public_key_b58": "J16RoSSAux4rQsUjnynHcNjx6tAo2v6T2efvwNdZeREN",
+      "anchor_type": "domain_verified",
+      "label": "Provenance agent"
+    }
+  ]
+}

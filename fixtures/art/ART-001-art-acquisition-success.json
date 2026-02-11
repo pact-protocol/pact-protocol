@@ -1,0 +1,174 @@
+{
+  "transcript_version": "pact-transcript/4.0",
+  "transcript_id": "transcript-41386167c5eb5a3d0d2f1915147b5c52dfbf969e17305ddf7a85479e96bfef4e",
+  "intent_id": "intent-art-001-art-acquisition",
+  "intent_type": "art.acquisition",
+  "created_at_ms": 1700000000000,
+  "policy_hash": "6449665c35403dc20db1fa1f9b0f34b8146b4209c4a8efbf0e20e4ccbdc46663",
+  "strategy_hash": "411eed61961dc52b73cb7413c4509a25c570a96068b488955def6aebb5de29a7",
+  "identity_snapshot_hash": "488ff9ed70015cce44a61eea4b4430d7f49feccdd0af1f49b0e62d4b539f8224",
+  "rounds": [
+    {
+      "round_number": 0,
+      "round_type": "INTENT",
+      "message_hash": "f66d940b0d64741fc42bcaad9598cae3960777f18f54d7edfdfdf1f3c842667f",
+      "envelope_hash": "f66d940b0d64741fc42bcaad9598cae3960777f18f54d7edfdfdf1f3c842667f",
+      "signature": {
+        "signer_public_key_b58": "29USBi5H26gHPEhAJzGdCFam7T4hksaiaPCgAshMGEJH",
+        "signature_b58": "4izWibPBvGDMEiMLC5fTjKMa9wxkbmNYZY2BNqxCqgLGidbH1QPhejz9FAmrAjjwuRU7xLhTfBYR5tpoXps8ZcHF",
+        "signed_at_ms": 1700000000000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1700000000000,
+      "previous_round_hash": "6b1ecf6844cb3c72e232ae5ac96d76271539607002e5e33fe428a059d0c2c9b7",
+      "agent_id": "buyer",
+      "public_key_b58": "29USBi5H26gHPEhAJzGdCFam7T4hksaiaPCgAshMGEJH",
+      "content_summary": {
+        "intent_type": "art.acquisition",
+        "budget_max": 500000,
+        "min_confidence": 0.9,
+        "subject": "ArtworkX"
+      },
+      "round_hash": "71e0d9a29b8f94cf1999ad11628586ed163d7f3ae22d01601943fdd6a6530cd4"
+    },
+    {
+      "round_number": 1,
+      "round_type": "ASK",
+      "message_hash": "3ea36f0ad99a47d7995a4b221b2190d4c3729626b8a369088cf4b596ff4ca501",
+      "envelope_hash": "3ea36f0ad99a47d7995a4b221b2190d4c3729626b8a369088cf4b596ff4ca501",
+      "signature": {
+        "signer_public_key_b58": "DCi6DFQteG5nfh8WDDTxYsd7yoeB7bJiYErgohRaaUgA",
+        "signature_b58": "sXgNRRdhRrc1WXMWNiFH5deVsGJnwd7MRy2VQ9RiEtErjropxSwJTSQQ11RGdsNFGyQhjxQ6uoaetqMi24PuSQi",
+        "signed_at_ms": 1700000001000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1700000001000,
+      "previous_round_hash": "71e0d9a29b8f94cf1999ad11628586ed163d7f3ae22d01601943fdd6a6530cd4",
+      "agent_id": "gallery",
+      "public_key_b58": "DCi6DFQteG5nfh8WDDTxYsd7yoeB7bJiYErgohRaaUgA",
+      "content_summary": {
+        "claims": [
+          {
+            "agent": "imaging_v1",
+            "subject": "art:authenticity:ArtworkX",
+            "authenticity_likelihood": true,
+            "conf": 0.65
+          },
+          {
+            "agent": "provenance",
+            "subject": "art:provenance:ArtworkX",
+            "provenance_valid": true,
+            "conf": 0.92
+          }
+        ]
+      },
+      "round_hash": "29b54f8d2ce2839f6798c92216a82c114368b0389486ecfc60a956977940acf9"
+    },
+    {
+      "round_number": 2,
+      "round_type": "ASK",
+      "message_hash": "e7d111a9dfdb04f3cf11479f9eea772c3b99ae1ca016d4bf583857cf13c09dd0",
+      "envelope_hash": "e7d111a9dfdb04f3cf11479f9eea772c3b99ae1ca016d4bf583857cf13c09dd0",
+      "signature": {
+        "signer_public_key_b58": "H2eeyMqhkLw1q7k1kuLJS5WCxv66w6yNYsTpvxPmTyTG",
+        "signature_b58": "1SGDTR76tFeHk8mEYrBsKBXxtuUcHAs7euUAXERiazQPDLoeyRh3WtwNiCsaK7oXf421ynQr9d4QT7njMqXSiBt",
+        "signed_at_ms": 1700000001500,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1700000001500,
+      "previous_round_hash": "29b54f8d2ce2839f6798c92216a82c114368b0389486ecfc60a956977940acf9",
+      "agent_id": "expert_a",
+      "public_key_b58": "H2eeyMqhkLw1q7k1kuLJS5WCxv66w6yNYsTpvxPmTyTG",
+      "content_summary": {
+        "claims": [
+          {
+            "claim_type": "expert_opinion",
+            "subject": "art:authenticity:ArtworkX",
+            "value": "Likely authentic",
+            "confidence": 0.9
+          }
+        ]
+      },
+      "round_hash": "b2ba99fda33efd00bc140978076475dec4ce0e109bcd4dd7eae2c782a36be5af"
+    },
+    {
+      "round_number": 3,
+      "round_type": "ASK",
+      "message_hash": "f844df281ddd483c5c141e8a9c327f97e9cd1f7187a62d669805e5f081779f0d",
+      "envelope_hash": "f844df281ddd483c5c141e8a9c327f97e9cd1f7187a62d669805e5f081779f0d",
+      "signature": {
+        "signer_public_key_b58": "7vqQqT3Ds9WfM3T8PGEDkwgqu9qV8733HBVcj4Ee8y88",
+        "signature_b58": "aBXyjwqVfT6rJc5m8TSjLqVaYAxsHP5TbFuPtV1BKEaftd7BnGou39YFLSd4meohMTQ3QUGzoMo7s7is8AjwAZP",
+        "signed_at_ms": 1700000001750,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1700000001750,
+      "previous_round_hash": "b2ba99fda33efd00bc140978076475dec4ce0e109bcd4dd7eae2c782a36be5af",
+      "agent_id": "expert_b",
+      "public_key_b58": "7vqQqT3Ds9WfM3T8PGEDkwgqu9qV8733HBVcj4Ee8y88",
+      "content_summary": {
+        "claims": [
+          {
+            "claim_type": "expert_opinion",
+            "subject": "art:authenticity:ArtworkX",
+            "value": "Concerns remain",
+            "confidence": 0.7
+          }
+        ]
+      },
+      "round_hash": "72eb554a4754624c436475d64b04f0fd0336fe125da0afd7f33d9bfdcc37dab4"
+    },
+    {
+      "round_number": 4,
+      "round_type": "ASK",
+      "message_hash": "b78c6d568ff32caf37361ea417e1aeb8ce1b9c1ae030c3bb250943a1c0ca3599",
+      "envelope_hash": "b78c6d568ff32caf37361ea417e1aeb8ce1b9c1ae030c3bb250943a1c0ca3599",
+      "signature": {
+        "signer_public_key_b58": "9JhF9uG3EVd4CPRH2dwbuqe1vZU1cuG5ay33qFGh4deW",
+        "signature_b58": "3SjgcsmJpcTmxnN3QNRnfLCPmLBCXd7VMtVKG59NCUnsJY44ZRtshc7cDG4UEPnhcJKZdmYFwVYc2eDZQsUyFUCj",
+        "signed_at_ms": 1700000002000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1700000002000,
+      "previous_round_hash": "72eb554a4754624c436475d64b04f0fd0336fe125da0afd7f33d9bfdcc37dab4",
+      "agent_id": "imaging_v2",
+      "public_key_b58": "9JhF9uG3EVd4CPRH2dwbuqe1vZU1cuG5ay33qFGh4deW",
+      "content_summary": {
+        "claims": [
+          {
+            "agent": "imaging_v2",
+            "subject": "art:authenticity:ArtworkX",
+            "authenticity_likelihood": true,
+            "conf": 0.93
+          }
+        ]
+      },
+      "round_hash": "b310f793aa05255997b204d6b9255ca4479ee46febbdb2b40671e4d8833b1e83"
+    },
+    {
+      "round_number": 5,
+      "round_type": "ACCEPT",
+      "message_hash": "43435ad9a9aed1c05aac3899349fb1281a5670c64ce3d8d0dc4584cde00f81c9",
+      "envelope_hash": "43435ad9a9aed1c05aac3899349fb1281a5670c64ce3d8d0dc4584cde00f81c9",
+      "signature": {
+        "signer_public_key_b58": "29USBi5H26gHPEhAJzGdCFam7T4hksaiaPCgAshMGEJH",
+        "signature_b58": "5oXtzQhKsiyCAdZRk9qPLyoRyW5Me16XtkhqUgf3iESHJqxQpPyShGobWPwFf6PDmYbF4Tc7rXqMoYjm5m6oMcXt",
+        "signed_at_ms": 1700000003000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1700000003000,
+      "previous_round_hash": "b310f793aa05255997b204d6b9255ca4479ee46febbdb2b40671e4d8833b1e83",
+      "agent_id": "buyer",
+      "public_key_b58": "29USBi5H26gHPEhAJzGdCFam7T4hksaiaPCgAshMGEJH",
+      "content_summary": {
+        "asset": "USD",
+        "amount": 300000,
+        "from": "29USBi5H26gHPEhAJzGdCFam7T4hksaiaPCgAshMGEJH",
+        "to": "DCi6DFQteG5nfh8WDDTxYsd7yoeB7bJiYErgohRaaUgA",
+        "settlement_rail": "stripe_like"
+      },
+      "round_hash": "3da8b49467b72a419e5e9ff6b071552964d30f8f826ea28340c723a19d5a4d0c"
+    }
+  ],
+  "final_hash": "d93bfe58e4344db1b487e1450270b575fc6326ebe2d3c2010429e984fa8fa05a"
+}
