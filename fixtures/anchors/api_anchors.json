@@ -1,0 +1,21 @@
+{
+  "version": "anchors/1.0",
+  "scope": "api_procurement_pilot_v0_4",
+  "anchors": [
+    {
+      "signer_public_key_b58": "CACXbtJrzCQqTJ3Ms5EYjgmd4xccVm6uADUYLHZuMYLx",
+      "anchor_type": "kyb_verified",
+      "label": "Provider B"
+    },
+    {
+      "signer_public_key_b58": "CACXbtJrzCQqTJ3Ms5EYjgmd4xccVm6uADUYLHZuMYLx",
+      "anchor_type": "domain_verified",
+      "label": "Provider B API domain"
+    },
+    {
+      "signer_public_key_b58": "8ZaPoHZtaRRSCgbWyDAbBAjGv9h8kY8JYJpaVrZtnc97",
+      "anchor_type": "oidc_verified",
+      "label": "Buyer (enterprise identity)"
+    }
+  ]
+}

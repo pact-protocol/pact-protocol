@@ -1,0 +1,114 @@
+{
+  "version": "pact-passport-snapshot/0.0",
+  "scoring_version": "boxer/0.1.0",
+  "generated_at_ms": 1770638563199,
+  "source_manifest_hashes": [
+    "transcript-75135e14bb3d75d3c23058718dedb03f61b7c755413dcfc8b92d1dc6a35830fb"
+  ],
+  "snapshot_id": "snapshot-9158c7debc4bab8b62c8eb5cbc3dac6b984fd566ac321a639256de9b6667e61f",
+  "entities": [
+    {
+      "entity_id": "entity-07034a7bf8c9debc4a559e39eeade8fdc46c2fac20fdd6bff7a70d2edd4b4385",
+      "signer_public_key_b58": "CACXbtJrzCQqTJ3Ms5EYjgmd4xccVm6uADUYLHZuMYLx",
+      "software_attestation": {
+        "agent_impl_id": "unknown",
+        "agent_version": "unknown"
+      },
+      "domains": [
+        {
+          "domain_id": "api:reliability",
+          "metrics": {
+            "reliability_score": 55
+          }
+        },
+        {
+          "domain_id": "api:weather",
+          "metrics": {
+            "reliability_score": 55
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "type": "kyb_verified",
+          "issuer": "Provider B",
+          "anchor_id": "CACXbtJrzCQq..."
+        },
+        {
+          "type": "domain_verified",
+          "issuer": "Provider B API domain",
+          "anchor_id": "CACXbtJrzCQq..."
+        }
+      ]
+    },
+    {
+      "entity_id": "entity-4e9d87cc66e14e980347f4297067de0117a5e3f72c21f747c014216964c30094",
+      "signer_public_key_b58": "7RWoAd4rBZxsaRaR4PjrX6jbfC8hoT3CGyeVWkndF7rJ",
+      "software_attestation": {
+        "agent_impl_id": "unknown",
+        "agent_version": "unknown"
+      },
+      "domains": [
+        {
+          "domain_id": "api:reliability",
+          "metrics": {
+            "reliability_score": 50
+          }
+        },
+        {
+          "domain_id": "api:weather",
+          "metrics": {
+            "reliability_score": 50
+          }
+        }
+      ],
+      "anchors": []
+    },
+    {
+      "entity_id": "entity-bcd970d13e75579ead488b791e758c6d9987ec8eead4a709692c2bd24126f149",
+      "signer_public_key_b58": "8ZaPoHZtaRRSCgbWyDAbBAjGv9h8kY8JYJpaVrZtnc97",
+      "software_attestation": {
+        "agent_impl_id": "unknown",
+        "agent_version": "unknown"
+      },
+      "domains": [
+        {
+          "domain_id": "api:reliability",
+          "metrics": {
+            "reliability_score": 55
+          }
+        },
+        {
+          "domain_id": "api:weather",
+          "metrics": {
+            "reliability_score": 55
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "type": "oidc_verified",
+          "issuer": "Buyer (enterprise identity)",
+          "anchor_id": "8ZaPoHZtaRRS..."
+        }
+      ]
+    }
+  ],
+  "recommendations": [
+    {
+      "type": "trust_gate",
+      "domain_id": "api:reliability",
+      "message": "Buyer min_reliability_gate=80; select provider meeting gate."
+    },
+    {
+      "type": "trust_gate",
+      "domain_id": "api:reliability",
+      "message": "Buyer min_calibration_gate=70; select provider meeting gate."
+    },
+    {
+      "type": "provider_selection",
+      "domain_id": "api:reliability",
+      "message": "Provider selected per trust gate (reliability/calibration); see Economic Details."
+    }
+  ]
+}

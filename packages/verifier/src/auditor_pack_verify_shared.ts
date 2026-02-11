@@ -118,5 +118,19 @@ export async function generateInsurerSummary(
   };
   if (auditTier != null) result.audit_tier = auditTier;
   if (transcript.metadata?.audit_sla != null) result.audit_sla = transcript.metadata.audit_sla;
+  // Economic details from last ACCEPT round (deterministic for pack verify recompute)
+  const acceptRound = [...transcript.rounds].reverse().find((r) => r.round_type === "ACCEPT");
+  if (acceptRound?.content_summary && typeof acceptRound.content_summary === "object") {
+    const cs = acceptRound.content_summary as Record<string, unknown>;
+    if ("asset" in cs || "amount" in cs) {
+      result.economic_details = {
+        asset: cs.asset ?? null,
+        amount: cs.amount ?? null,
+        from: cs.from ?? null,
+        to: cs.to ?? null,
+        settlement_rail: cs.settlement_rail ?? null,
+      };
+    }
+  }
   return result;
 }

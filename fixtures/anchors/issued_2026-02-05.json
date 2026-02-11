@@ -1,0 +1,190 @@
+{
+  "version": "anchors/1.0",
+  "issued_at": "2026-02-05T18:02:39.515Z",
+  "attestations": [
+    {
+      "subject_signer_public_key_b58": "DCi6DFQteG5nfh8WDDTxYsd7yoeB7bJiYErgohRaaUgA",
+      "anchor_type": "kyb_verified",
+      "issuer_public_key_b58": "A1V7H38GegFPQyJJmBzCrWs8mxtL1vYpmyRmfsyy7rXc",
+      "issued_at_ms": 1770314559469,
+      "payload": {
+        "scope": "demo",
+        "label": "Acme Gallery LLC"
+      },
+      "scheme": "ed25519",
+      "display_name": "Acme Gallery LLC",
+      "verification_method": "kyb",
+      "expires_at_ms": null,
+      "revocation_ref": "revocation:anchor-71c9aadee46c12815d4108a1a15a66cfe927818028b80ebd294061b01603ef33",
+      "evidence_refs": null,
+      "anchor_id": "anchor-71c9aadee46c12815d4108a1a15a66cfe927818028b80ebd294061b01603ef33",
+      "signature_b58": "4e7sC75LqgkeFY1m4XYCSsXartKdqQbbJegiHWmeeiKwjZvkreQ9y6UZqNGgr5nvqcfcW5xLUTkFepLp4ekej7te"
+    },
+    {
+      "subject_signer_public_key_b58": "H2eeyMqhkLw1q7k1kuLJS5WCxv66w6yNYsTpvxPmTyTG",
+      "anchor_type": "credential_verified",
+      "issuer_public_key_b58": "A1V7H38GegFPQyJJmBzCrWs8mxtL1vYpmyRmfsyy7rXc",
+      "issued_at_ms": 1770314559493,
+      "payload": {
+        "scope": "demo",
+        "label": "Human Expert A"
+      },
+      "scheme": "ed25519",
+      "display_name": "Human Expert A",
+      "verification_method": "credential",
+      "expires_at_ms": null,
+      "revocation_ref": "revocation:anchor-42d99936305e22f19f806cd0372ed142901d4d60b60556207c9af96fead15c5c",
+      "evidence_refs": null,
+      "anchor_id": "anchor-42d99936305e22f19f806cd0372ed142901d4d60b60556207c9af96fead15c5c",
+      "signature_b58": "2mCZfEK573nXn4aEdrNWDU31nRLebQTev9iB2FRLMmxSUoatnAeqrznxyWdHD98GmAa4Pk5uMJ5xWTjGupCQNEpz"
+    },
+    {
+      "subject_signer_public_key_b58": "7vqQqT3Ds9WfM3T8PGEDkwgqu9qV8733HBVcj4Ee8y88",
+      "anchor_type": "credential_verified",
+      "issuer_public_key_b58": "A1V7H38GegFPQyJJmBzCrWs8mxtL1vYpmyRmfsyy7rXc",
+      "issued_at_ms": 1770314559497,
+      "payload": {
+        "scope": "demo",
+        "label": "Human Expert B"
+      },
+      "scheme": "ed25519",
+      "display_name": "Human Expert B",
+      "verification_method": "credential",
+      "expires_at_ms": null,
+      "revocation_ref": "revocation:anchor-a84b23574bbe61f8bc3b2804b8f460653abad58b6cdab17304c48451de6bde4e",
+      "evidence_refs": null,
+      "anchor_id": "anchor-a84b23574bbe61f8bc3b2804b8f460653abad58b6cdab17304c48451de6bde4e",
+      "signature_b58": "4dd9aYTWAorTSV3VaZtVf1F71cZpobjaC4FUpdptxFDrHc387TY6MVfRJUpVGP3hqsXkiVLda7c2epHzDG6arU3q"
+    },
+    {
+      "subject_signer_public_key_b58": "J16RoSSAux4rQsUjnynHcNjx6tAo2v6T2efvwNdZeREN",
+      "anchor_type": "domain_verified",
+      "issuer_public_key_b58": "A1V7H38GegFPQyJJmBzCrWs8mxtL1vYpmyRmfsyy7rXc",
+      "issued_at_ms": 1770314559500,
+      "payload": {
+        "scope": "demo",
+        "label": "Provenance Agent"
+      },
+      "scheme": "ed25519",
+      "display_name": "Provenance Agent",
+      "verification_method": "api_key",
+      "expires_at_ms": null,
+      "revocation_ref": "revocation:anchor-6bf15a47c675c4db266d517c7aa97af6724a79ac8b9f41feb065452edc11c982",
+      "evidence_refs": null,
+      "anchor_id": "anchor-6bf15a47c675c4db266d517c7aa97af6724a79ac8b9f41feb065452edc11c982",
+      "signature_b58": "4dUP3HJ7XnRViNitjcnYX9PyLQxc3XzvRHNC2mUoJPqP9yHZGqzUEqoTEz2K3mSWJk5TB9jRmehPDxFxCwkZusP5"
+    },
+    {
+      "subject_signer_public_key_b58": "CACXbtJrzCQqTJ3Ms5EYjgmd4xccVm6uADUYLHZuMYLx",
+      "anchor_type": "kyb_verified",
+      "issuer_public_key_b58": "A1V7H38GegFPQyJJmBzCrWs8mxtL1vYpmyRmfsyy7rXc",
+      "issued_at_ms": 1770314559504,
+      "payload": {
+        "scope": "demo",
+        "label": "Acme Data LLC"
+      },
+      "scheme": "ed25519",
+      "display_name": "Acme Data LLC",
+      "verification_method": "kyb",
+      "expires_at_ms": null,
+      "revocation_ref": "revocation:anchor-afb6f662d99b27c3009ac033f118fccc3d18f111e05945f1b064abf565c7bd44",
+      "evidence_refs": null,
+      "anchor_id": "anchor-afb6f662d99b27c3009ac033f118fccc3d18f111e05945f1b064abf565c7bd44",
+      "signature_b58": "3tir7zjT93ycNm1YczPqADyLvnMahnS76N7gxwAAYRUCdZKBNK858FQsWBKbVkTMQRTLxcmAswc8VkasZCCQJ8ru"
+    },
+    {
+      "subject_signer_public_key_b58": "CACXbtJrzCQqTJ3Ms5EYjgmd4xccVm6uADUYLHZuMYLx",
+      "anchor_type": "platform_verified",
+      "issuer_public_key_b58": "A1V7H38GegFPQyJJmBzCrWs8mxtL1vYpmyRmfsyy7rXc",
+      "issued_at_ms": 1770314559507,
+      "payload": {
+        "scope": "demo",
+        "label": "Acme Data LLC"
+      },
+      "scheme": "ed25519",
+      "display_name": "Acme Data LLC",
+      "verification_method": "api_key",
+      "expires_at_ms": null,
+      "revocation_ref": "revocation:anchor-f7c7838caa77cb95fc4982f30c8df8e1fba71560e767ae2ed8f477a2983a17bd",
+      "evidence_refs": null,
+      "anchor_id": "anchor-f7c7838caa77cb95fc4982f30c8df8e1fba71560e767ae2ed8f477a2983a17bd",
+      "signature_b58": "5rNKkeyQjzkZb7BtkRARbtX64ahNU14RPDQyMkkcKCcKrm6fhhRAHc254yvbPXjYteXWwsoJsnTGbG4wzj5BgUmK"
+    },
+    {
+      "subject_signer_public_key_b58": "8ZaPoHZtaRRSCgbWyDAbBAjGv9h8kY8JYJpaVrZtnc97",
+      "anchor_type": "oidc_verified",
+      "issuer_public_key_b58": "A1V7H38GegFPQyJJmBzCrWs8mxtL1vYpmyRmfsyy7rXc",
+      "issued_at_ms": 1770314559511,
+      "payload": {
+        "scope": "demo",
+        "label": "Enterprise Buyer"
+      },
+      "scheme": "ed25519",
+      "display_name": "Enterprise Buyer",
+      "verification_method": "oidc",
+      "expires_at_ms": null,
+      "revocation_ref": "revocation:anchor-863def34af1160e3fb89828949d507161dad6688a10ec7a4ee87ca02334e9b30",
+      "evidence_refs": null,
+      "anchor_id": "anchor-863def34af1160e3fb89828949d507161dad6688a10ec7a4ee87ca02334e9b30",
+      "signature_b58": "VeVEBnjUY8WanCufUeCTKi8KwqFqVUroYPDDxtCuYbhg7S7hUgsSbAJvaHWtcrhNsSY6PWgJRHDAp5JYGEuzbtr"
+    }
+  ],
+  "anchors": [
+    {
+      "subject_signer_public_key_b58": "DCi6DFQteG5nfh8WDDTxYsd7yoeB7bJiYErgohRaaUgA",
+      "signer_public_key_b58": "DCi6DFQteG5nfh8WDDTxYsd7yoeB7bJiYErgohRaaUgA",
+      "anchor_type": "kyb_verified",
+      "display_name": "Acme Gallery LLC",
+      "verification_method": "kyb",
+      "label": "Acme Gallery LLC"
+    },
+    {
+      "subject_signer_public_key_b58": "H2eeyMqhkLw1q7k1kuLJS5WCxv66w6yNYsTpvxPmTyTG",
+      "signer_public_key_b58": "H2eeyMqhkLw1q7k1kuLJS5WCxv66w6yNYsTpvxPmTyTG",
+      "anchor_type": "credential_verified",
+      "display_name": "Human Expert A",
+      "verification_method": "credential",
+      "label": "Human Expert A"
+    },
+    {
+      "subject_signer_public_key_b58": "7vqQqT3Ds9WfM3T8PGEDkwgqu9qV8733HBVcj4Ee8y88",
+      "signer_public_key_b58": "7vqQqT3Ds9WfM3T8PGEDkwgqu9qV8733HBVcj4Ee8y88",
+      "anchor_type": "credential_verified",
+      "display_name": "Human Expert B",
+      "verification_method": "credential",
+      "label": "Human Expert B"
+    },
+    {
+      "subject_signer_public_key_b58": "J16RoSSAux4rQsUjnynHcNjx6tAo2v6T2efvwNdZeREN",
+      "signer_public_key_b58": "J16RoSSAux4rQsUjnynHcNjx6tAo2v6T2efvwNdZeREN",
+      "anchor_type": "domain_verified",
+      "display_name": "Provenance Agent",
+      "verification_method": "api_key",
+      "label": "Provenance Agent"
+    },
+    {
+      "subject_signer_public_key_b58": "CACXbtJrzCQqTJ3Ms5EYjgmd4xccVm6uADUYLHZuMYLx",
+      "signer_public_key_b58": "CACXbtJrzCQqTJ3Ms5EYjgmd4xccVm6uADUYLHZuMYLx",
+      "anchor_type": "kyb_verified",
+      "display_name": "Acme Data LLC",
+      "verification_method": "kyb",
+      "label": "Acme Data LLC"
+    },
+    {
+      "subject_signer_public_key_b58": "CACXbtJrzCQqTJ3Ms5EYjgmd4xccVm6uADUYLHZuMYLx",
+      "signer_public_key_b58": "CACXbtJrzCQqTJ3Ms5EYjgmd4xccVm6uADUYLHZuMYLx",
+      "anchor_type": "platform_verified",
+      "display_name": "Acme Data LLC",
+      "verification_method": "api_key",
+      "label": "Acme Data LLC"
+    },
+    {
+      "subject_signer_public_key_b58": "8ZaPoHZtaRRSCgbWyDAbBAjGv9h8kY8JYJpaVrZtnc97",
+      "signer_public_key_b58": "8ZaPoHZtaRRSCgbWyDAbBAjGv9h8kY8JYJpaVrZtnc97",
+      "anchor_type": "oidc_verified",
+      "display_name": "Enterprise Buyer",
+      "verification_method": "oidc",
+      "label": "Enterprise Buyer"
+    }
+  ]
+}

@@ -1,14 +1,17 @@
 import type { GCView } from '../types';
+import { badgeToneToCssClass, getOutcomeBadgeStyle } from '../lib/badgeSemantics';
+import { getMoneyMovedDisplay, MONEY_MOVED_UNTRUSTED_NOTE } from '../lib/moneyMovedDisplay';
+import type { IntegrityVerdictKind } from '../lib/integrityVerdict';
 
 interface ExecutionSummaryPanelProps {
   gcView: GCView;
+  integrityVerdict?: IntegrityVerdictKind;
   transcriptJson?: string;
   replayVerifyResult?: { errors?: Array<{ round_number?: number; message?: string }> } | null;
 }
 
 const ROUND_TYPE_TO_STEP: Record<string, string> = {
   INTENT: 'Quote requested',
-  ASK: 'Quote provided',
   BID: 'Quote provided',
   COUNTER: 'Counter offer',
   ACCEPT: 'Accept',
@@ -16,7 +19,20 @@ const ROUND_TYPE_TO_STEP: Record<string, string> = {
   ABORT: 'Abort',
 };
 
-function stepName(event: string): string {
+/** ASK step label by agent_id and/or claim_type (Art pilot: gallery offer, expert_opinion, imaging). */
+function askStepLabel(round: { agent_id?: string; content_summary?: { claims?: Array<{ claim_type?: string; agent?: string }> } }): string {
+  const agentId = (round.agent_id ?? '').toLowerCase();
+  const claims = round.content_summary?.claims ?? [];
+  const hasExpertOpinion = claims.some((c) => (c.claim_type ?? '').toLowerCase().includes('expert_opinion'));
+  const hasImaging = claims.some((c) => (c.agent ?? '').toLowerCase().includes('imaging')) || agentId.includes('imaging');
+  if (agentId === 'gallery') return 'Offer / quote received';
+  if (hasExpertOpinion || agentId === 'expert_a' || agentId === 'expert_b') return 'Expert opinion received';
+  if (hasImaging || agentId === 'imaging_v2') return 'Imaging analysis received';
+  return 'Attestation received';
+}
+
+function stepName(event: string, round?: { agent_id?: string; content_summary?: { claims?: Array<{ claim_type?: string; agent?: string }> } }): string {
+  if (event === 'ASK' && round) return askStepLabel(round);
   return ROUND_TYPE_TO_STEP[event] ?? event;
 }
 
@@ -34,14 +50,14 @@ function settlementStatusFromPack(
 
 export default function ExecutionSummaryPanel({
   gcView,
+  integrityVerdict,
   transcriptJson,
   replayVerifyResult,
 }: ExecutionSummaryPanelProps) {
   const es = gcView?.executive_summary;
 
-  const moneyMoved = es?.money_moved;
-  const moneyMovedLabel =
-    moneyMoved === true ? 'YES' : moneyMoved === false ? 'NO' : 'UNKNOWN';
+  const moneyMovedDisplay = getMoneyMovedDisplay(integrityVerdict ?? 'VERIFIED', es?.money_moved);
+  const moneyMovedLabel = moneyMovedDisplay.value;
   const settlementAttempted = es?.settlement_attempted;
   const settlementAttemptedLabel =
     settlementAttempted === true ? 'YES' : settlementAttempted === false ? 'NO' : '—';
@@ -61,9 +77,14 @@ export default function ExecutionSummaryPanel({
   } else if (transcriptJson) {
     try {
       const t = JSON.parse(transcriptJson);
-      const rounds = t?.rounds ?? [];
-      steps = rounds.map((r: { round_type?: string; round_number?: number }) => ({
-        step: stepName(r.round_type ?? ''),
+      const rounds = (t?.rounds ?? []) as Array<{
+        round_type?: string;
+        round_number?: number;
+        agent_id?: string;
+        content_summary?: { claims?: Array<{ claim_type?: string; agent?: string }> };
+      }>;
+      steps = rounds.map((r) => ({
+        step: stepName(r.round_type ?? '', r),
         event: r.round_type ?? '',
         round: r.round_number,
       }));
@@ -103,10 +124,15 @@ export default function ExecutionSummaryPanel({
     });
   }
 
-  const moneyMovedClass =
-    moneyMovedLabel === 'YES' ? 'status-good' : moneyMovedLabel === 'NO' ? 'status-bad' : 'status-warn';
+  const moneyMovedClass = badgeToneToCssClass(
+    moneyMovedLabel === 'YES' ? 'good' : moneyMovedLabel === 'NO' ? 'bad' : 'warn'
+  );
   const settlementClass =
-    settlementAttemptedLabel === 'YES' ? 'status-good' : settlementAttemptedLabel === 'NO' ? 'status-bad' : '';
+    settlementAttemptedLabel === 'YES'
+      ? badgeToneToCssClass('good')
+      : settlementAttemptedLabel === 'NO'
+      ? badgeToneToCssClass('bad')
+      : '';
 
   return (
     <div className="execution-summary-panel panel">
@@ -116,6 +142,9 @@ export default function ExecutionSummaryPanel({
         <div className="execution-summary-row">
           <span className="execution-summary-label">Money Moved:</span>
           <span className={`execution-summary-value ${moneyMovedClass}`}>{moneyMovedLabel}</span>
+          {moneyMovedDisplay.showUntrustedNote && (
+            <p className="execution-money-moved-untrusted-note" role="status">{MONEY_MOVED_UNTRUSTED_NOTE}</p>
+          )}
         </div>
         <div className="execution-summary-row">
           <span className="execution-summary-label">Settlement Attempted:</span>
@@ -127,13 +156,9 @@ export default function ExecutionSummaryPanel({
           <div className="execution-summary-row">
             <span className="execution-summary-label">Settlement Status:</span>
             <span
-              className={`execution-summary-value ${
-                settlementStatus === 'COMPLETED'
-                  ? 'status-good'
-                  : settlementStatus === 'FAILED' || settlementStatus === 'ABORTED'
-                  ? 'status-bad'
-                  : 'status-warn'
-              }`}
+              className={`execution-summary-value ${badgeToneToCssClass(
+                getOutcomeBadgeStyle(settlementStatus ?? '')
+              )}`}
             >
               {settlementStatus}
             </span>
@@ -157,13 +182,9 @@ export default function ExecutionSummaryPanel({
                   <td>{row.step || '—'}</td>
                   <td>
                     <span
-                      className={
-                        row.result === 'SUCCESS'
-                          ? 'status-good'
-                          : row.result === 'FAILED'
-                          ? 'status-bad'
-                          : 'status-warn'
-                      }
+                      className={badgeToneToCssClass(
+                        row.result === 'SUCCESS' ? 'good' : row.result === 'FAILED' ? 'bad' : 'warn'
+                      )}
                     >
                       {row.result}
                     </span>

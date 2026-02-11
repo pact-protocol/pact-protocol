@@ -28,6 +28,7 @@ import {
   getTranscriptStableId,
   type PassportState,
 } from "../util/passport_v1.js";
+import { generateInsurerSummary } from "../auditor_pack_verify_shared.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -132,115 +133,6 @@ function loadConstitution(): { content: string; version: string; hash: string } 
   }
 
   throw new Error("Could not find CONSTITUTION_v1.md");
-}
-
-/**
- * Generate insurer summary (simplified inline version)
- */
-async function generateInsurerSummary(
-  transcript: TranscriptV4,
-  gcView: Awaited<ReturnType<typeof renderGCView>>,
-  judgment: Awaited<ReturnType<typeof resolveBlameV1>>
-): Promise<Record<string, unknown>> {
-  type Tier = "A" | "B" | "C";
-
-  function tierFromPassport(score: number): Tier {
-    if (score >= 0.20) return "A";
-    if (score >= -0.10) return "B";
-    return "C";
-  }
-
-  function extractSigners(t: TranscriptV4): { buyer: string | null; provider: string | null } {
-    const intentRound = t.rounds.find((r) => r.round_type === "INTENT");
-    const buyerKey = intentRound?.signature?.signer_public_key_b58 || intentRound?.public_key_b58 || null;
-
-    const providerRound = t.rounds.find((r) => {
-      const roundKey = r.signature?.signer_public_key_b58 || r.public_key_b58;
-      return roundKey && roundKey !== buyerKey &&
-        (r.round_type === "ASK" || r.round_type === "COUNTER" || r.round_type === "ACCEPT");
-    });
-    const providerKey = providerRound?.signature?.signer_public_key_b58 || providerRound?.public_key_b58 || null;
-
-    return { buyer: buyerKey, provider: providerKey };
-  }
-
-  function computePassportScoreDelta(faultDomain: string, outcome: string, isProvider: boolean): number {
-    if (outcome === "COMPLETED" || outcome.includes("SUCCESS")) {
-      return 0.01;
-    }
-    if (faultDomain === "NO_FAULT") {
-      return 0.01;
-    }
-    if (isProvider && (faultDomain === "PROVIDER_AT_FAULT" || faultDomain === "PROVIDER_RAIL_AT_FAULT")) {
-      return -0.05;
-    }
-    if (!isProvider && (faultDomain === "BUYER_AT_FAULT" || faultDomain === "BUYER_RAIL_AT_FAULT")) {
-      return -0.05;
-    }
-    return 0;
-  }
-
-  const signers = extractSigners(transcript);
-  const outcome = gcView.executive_summary.status;
-  const faultDomain = gcView.responsibility.judgment.fault_domain;
-  const confidence = judgment.confidence;
-
-  const buyerScore = computePassportScoreDelta(faultDomain, outcome, false);
-  const providerScore = computePassportScoreDelta(faultDomain, outcome, true);
-
-  const riskFactors: string[] = [];
-  const surcharges: string[] = [];
-
-  if (outcome.includes("FAILED") || outcome.includes("TIMEOUT")) {
-    riskFactors.push(outcome);
-  }
-  if (faultDomain !== "NO_FAULT") {
-    riskFactors.push(faultDomain);
-  }
-  if (confidence < 0.7) {
-    surcharges.push("LOW_CONFIDENCE");
-  }
-  // Informational audit tier (only when present in transcript; does not affect verification)
-  const auditTier = transcript.metadata?.audit_tier as "T1" | "T2" | "T3" | undefined;
-  if (auditTier === "T2") riskFactors.push("TIER_T2");
-  if (auditTier === "T3") riskFactors.push("TIER_T3");
-
-  const buyerTier = tierFromPassport(buyerScore);
-  const providerTier = tierFromPassport(providerScore);
-
-  let coverage: "COVERED" | "COVERED_WITH_SURCHARGE" | "ESCROW_REQUIRED" | "EXCLUDED" = "COVERED";
-  if (gcView.integrity.hash_chain === "INVALID") {
-    coverage = "EXCLUDED";
-  } else if (buyerTier === "C" || providerTier === "C") {
-    coverage = "ESCROW_REQUIRED";
-  } else if (surcharges.length > 0 || buyerTier === "B" || providerTier === "B") {
-    coverage = "COVERED_WITH_SURCHARGE";
-  }
-
-  const result: Record<string, unknown> = {
-    version: "insurer_summary/1.0",
-    constitution_hash: gcView.constitution.hash.substring(0, 16) + "...",
-    integrity: gcView.integrity.hash_chain === "VALID" ? "VALID" : "INVALID",
-    outcome,
-    fault_domain: faultDomain,
-    confidence,
-    buyer: signers.buyer ? {
-      signer: signers.buyer.substring(0, 12) + "...",
-      passport_score: buyerScore,
-      tier: buyerTier,
-    } : null,
-    provider: signers.provider ? {
-      signer: signers.provider.substring(0, 12) + "...",
-      passport_score: providerScore,
-      tier: providerTier,
-    } : null,
-    risk_factors: riskFactors,
-    surcharges,
-    coverage,
-  };
-  if (auditTier != null) result.audit_tier = auditTier;
-  if (transcript.metadata?.audit_sla != null) result.audit_sla = transcript.metadata.audit_sla;
-  return result;
 }
 
 /**
@@ -476,6 +368,39 @@ export async function main(): Promise<void> {
     const judgment = await resolveBlameV1(transcript);
     const insurerSummary = await generateInsurerSummary(transcript, gcView, judgment);
 
+    // Outcome events for art.acquisition or api.procurement COMPLETED
+    let outcomeEvents: Record<string, unknown> | null = null;
+    if (gcView.executive_summary.status === "COMPLETED") {
+      const lastTs = transcript.rounds[transcript.rounds.length - 1]?.timestamp_ms ?? 0;
+      if (transcript.intent_type === "art.acquisition") {
+        outcomeEvents = {
+          version: "outcome_events/1.0",
+          transcript_id: transcript.transcript_id,
+          events: [
+            {
+              type: "authenticity_confirmed",
+              subject: "ArtworkX",
+              at_ms: lastTs + 90_000,
+              ref: transcript.transcript_id,
+            },
+          ],
+        };
+      } else if (transcript.intent_type === "api.procurement") {
+        outcomeEvents = {
+          version: "outcome_events/1.0",
+          transcript_id: transcript.transcript_id,
+          events: [
+            {
+              type: "delivery_verified",
+              subject: "api:weather:nyc",
+              at_ms: lastTs,
+              ref: transcript.transcript_id,
+            },
+          ],
+        };
+      }
+    }
+
     // Optional artifacts
     let passportSnapshot: Record<string, unknown> | null = null;
     let contentionReport: Record<string, unknown> | null = null;
@@ -500,6 +425,7 @@ export async function main(): Promise<void> {
     ];
     if (passportSnapshot) includedArtifacts.push("derived/passport_snapshot.json");
     if (contentionReport) includedArtifacts.push("derived/contention_report.json");
+    if (outcomeEvents) includedArtifacts.push("derived/outcome_events.json");
     includedArtifacts.push("README.txt");
 
     // Build manifest (audit_tier/audit_sla only when present in transcript metadata; backward compatible)
@@ -547,6 +473,9 @@ export async function main(): Promise<void> {
     }
     if (contentionReport) {
       files.push({ path: "derived/contention_report.json", content: JSON.stringify(contentionReport, null, 2) });
+    }
+    if (outcomeEvents) {
+      files.push({ path: "derived/outcome_events.json", content: JSON.stringify(outcomeEvents, null, 2) });
     }
 
     // Compute checksums and add files

@@ -81,6 +81,36 @@ This project follows **Semantic Versioning** and prioritizes backward compatibil
 
 ---
 
+## [Unreleased] — Boxer, Evidence Viewer & Anchor Onboarding Production Readiness
+
+### Added
+- **Evidence Viewer production readiness**
+  - Subpath deployment support (`VITE_BASE_PATH`) for deployment to `/evidence-viewer/` or similar
+  - Error boundary for graceful handling of React render errors
+  - Production deployment docs and env var documentation
+- **Anchor Onboarding production integrations**
+  - Stripe Connect OAuth flow: `GET /api/stripe/connect`, `GET /api/stripe/callback` for real `platform_verified` anchors with `account_id_fingerprint`
+  - OIDC verification: `POST /api/oidc/verify` for real `oidc_verified` anchors with `assertion_fingerprint`
+  - Env-gated: `STRIPE_CLIENT_ID`, `STRIPE_CLIENT_SECRET`, `STRIPE_CONNECT_REDIRECT_URI`, `OIDC_ISSUER`, `OIDC_JWKS_URI`
+- **Run production flows locally runbook**: `docs/guides/RUN_PRODUCTION_FLOWS_LOCAL.md` — step-by-step for Registry, Onboarding, Evidence Viewer, Stripe Connect, OIDC
+
+### Changed
+- **Evidence Viewer**
+  - Credential/Stripe/OIDC badges: tooltips show issuer and verification type (e.g. "Credential Verified (issuer: Human Expert A)")
+  - Claims made: handle alternate claim shapes (`conf`, `authenticity_likelihood`, `provenance_valid`) for full value/confidence display
+  - Local History: clarified that it is buyer/provider only; experts and operational agents have no transaction rows
+  - Demo pack and claims package fetching: use `import.meta.env.BASE_URL` for subpath deployment
+- **Anchor Onboarding**
+  - Dotenv loading for `.env` (app dir and repo root)
+  - UI: "Connect with Stripe" and "Verify OIDC token" when production env vars are set
+
+### Documentation
+- **Boxer**: `docs/BOXER.md` and `packages/boxer/README.md` — added production anchors section (Anchor Onboarding + Stripe/OIDC)
+- **Design partner bundle**: link to production flows runbook
+- **DOCUMENTATION_INDEX.md**: added `guides/RUN_PRODUCTION_FLOWS_LOCAL.md`
+
+---
+
 ## [Unreleased] — Replay Verification Improvements & Provider Server Updates
 
 ### Changed

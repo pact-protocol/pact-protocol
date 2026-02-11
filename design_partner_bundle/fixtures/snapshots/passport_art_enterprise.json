@@ -1,0 +1,180 @@
+{
+  "version": "pact-passport-snapshot/0.0",
+  "scoring_version": "boxer/0.1.0",
+  "generated_at_ms": 1770638563146,
+  "source_manifest_hashes": [
+    "transcript-41386167c5eb5a3d0d2f1915147b5c52dfbf969e17305ddf7a85479e96bfef4e"
+  ],
+  "snapshot_id": "snapshot-b503ee39dff70b2621e358455a87e117c567eb7b2f8cc275820d5f56548f16a7",
+  "entities": [
+    {
+      "entity_id": "entity-0c365ea4fa85536840fdddfb003c8d14aee18aeffc783226d3f5a972257452ae",
+      "signer_public_key_b58": "29USBi5H26gHPEhAJzGdCFam7T4hksaiaPCgAshMGEJH",
+      "software_attestation": {
+        "agent_impl_id": "unknown",
+        "agent_version": "unknown"
+      },
+      "domains": [
+        {
+          "domain_id": "art:authenticity",
+          "metrics": {
+            "reliability_score": 93
+          }
+        },
+        {
+          "domain_id": "art:provenance",
+          "metrics": {
+            "reliability_score": 92
+          }
+        }
+      ],
+      "anchors": []
+    },
+    {
+      "entity_id": "entity-1519a09e4d140cac03a322a3bdb55e953c5f4f08bef0b34110d71f2656b3b6e1",
+      "signer_public_key_b58": "H2eeyMqhkLw1q7k1kuLJS5WCxv66w6yNYsTpvxPmTyTG",
+      "software_attestation": {
+        "agent_impl_id": "unknown",
+        "agent_version": "unknown"
+      },
+      "domains": [
+        {
+          "domain_id": "art:authenticity",
+          "metrics": {
+            "reliability_score": 93
+          }
+        },
+        {
+          "domain_id": "art:provenance",
+          "metrics": {
+            "reliability_score": 92
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "type": "credential_verified",
+          "issuer": "Human Expert A",
+          "anchor_id": "H2eeyMqhkLw1..."
+        }
+      ]
+    },
+    {
+      "entity_id": "entity-752309626233f0d7616b3414102826090ed7cb6743ecb18fcc9c716ad8e027fe",
+      "signer_public_key_b58": "9JhF9uG3EVd4CPRH2dwbuqe1vZU1cuG5ay33qFGh4deW",
+      "software_attestation": {
+        "agent_impl_id": "unknown",
+        "agent_version": "unknown"
+      },
+      "domains": [
+        {
+          "domain_id": "art:authenticity",
+          "metrics": {
+            "reliability_score": 93
+          }
+        },
+        {
+          "domain_id": "art:provenance",
+          "metrics": {
+            "reliability_score": 92
+          }
+        }
+      ],
+      "anchors": []
+    },
+    {
+      "entity_id": "entity-850aab80108175162d290c5833522c8ecdba53427db9c912f3f196d8d6b485ca",
+      "signer_public_key_b58": "7vqQqT3Ds9WfM3T8PGEDkwgqu9qV8733HBVcj4Ee8y88",
+      "software_attestation": {
+        "agent_impl_id": "unknown",
+        "agent_version": "unknown"
+      },
+      "domains": [
+        {
+          "domain_id": "art:authenticity",
+          "metrics": {
+            "reliability_score": 93
+          }
+        },
+        {
+          "domain_id": "art:provenance",
+          "metrics": {
+            "reliability_score": 92
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "type": "credential_verified",
+          "issuer": "Human Expert B",
+          "anchor_id": "7vqQqT3Ds9Wf..."
+        }
+      ]
+    },
+    {
+      "entity_id": "entity-e273bbc679ae399dd56ce0438e27f68a3a386862cc988cd996dc7fc3141d4e4c",
+      "signer_public_key_b58": "DCi6DFQteG5nfh8WDDTxYsd7yoeB7bJiYErgohRaaUgA",
+      "software_attestation": {
+        "agent_impl_id": "unknown",
+        "agent_version": "unknown"
+      },
+      "domains": [
+        {
+          "domain_id": "art:authenticity",
+          "metrics": {
+            "reliability_score": 93
+          }
+        },
+        {
+          "domain_id": "art:provenance",
+          "metrics": {
+            "reliability_score": 92
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "type": "kyb_verified",
+          "issuer": "Gallery/Seller",
+          "anchor_id": "DCi6DFQteG5n..."
+        }
+      ]
+    },
+    {
+      "entity_id": "entity-e297f2b1ba1787f918f2d9154ffa19a14fe21a8ab97ebdc06907a9192f84f3a1",
+      "signer_public_key_b58": "J16RoSSAux4rQsUjnynHcNjx6tAo2v6T2efvwNdZeREN",
+      "software_attestation": {
+        "agent_impl_id": "unknown",
+        "agent_version": "unknown"
+      },
+      "domains": [
+        {
+          "domain_id": "art:authenticity",
+          "metrics": {
+            "reliability_score": 50
+          }
+        },
+        {
+          "domain_id": "art:provenance",
+          "metrics": {
+            "reliability_score": 50
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "type": "domain_verified",
+          "issuer": "Provenance agent",
+          "anchor_id": "J16RoSSAux4r..."
+        }
+      ]
+    }
+  ],
+  "recommendations": [
+    {
+      "type": "cleared",
+      "domain_id": "art:authenticity",
+      "message": "Rerun completed; high-confidence result on art:authenticity."
+    }
+  ]
+}

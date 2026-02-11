@@ -40,6 +40,7 @@ Complete index of all PACT documentation for easy reference.
 
 - **[guides/BUYER_GUIDE.md](./guides/BUYER_GUIDE.md)** - Guide for buyers (consumers)
 - **[guides/PROVIDER_GUIDE.md](./guides/PROVIDER_GUIDE.md)** - Guide for providers (sellers)
+- **[guides/RUN_PRODUCTION_FLOWS_LOCAL.md](./guides/RUN_PRODUCTION_FLOWS_LOCAL.md)** - Run Stripe Connect, OIDC, and Evidence Viewer ↔ Onboarding locally
 
 ## Security & Architecture
 
@@ -123,6 +124,10 @@ Complete index of all PACT documentation for easy reference.
 - [passport/PASSPORT_REGISTRY_CONTRACT.md](./passport/PASSPORT_REGISTRY_CONTRACT.md) - Passport registry contract (immutability, determinism, append-only, INDETERMINATE_TAMPER, explicit non-goals)
 - [passport/PASSPORT_REGISTRY_SPEC_v0.md](./passport/PASSPORT_REGISTRY_SPEC_v0.md) - Passport registry spec v0
 
+### Boxer (passport snapshot / trust signals)
+- [BOXER.md](./BOXER.md) - Boxer: what it was made for, what’s in it, how it improves Pact, how Pact uses it, how users use it (derived trust layer; not evidence)
+- [packages/boxer/README.md](../packages/boxer/README.md) - Boxer package: CLI recompute, snapshot schema, commands, design-partner usage
+
 ### Evidence Viewer & GC
 - [gc/EVIDENCE_VIEWER_SPEC.md](./gc/EVIDENCE_VIEWER_SPEC.md) - Evidence Viewer specification
 - [gc/GC_5_MINUTE_APPROVAL_CHECKLIST.md](./gc/GC_5_MINUTE_APPROVAL_CHECKLIST.md) - GC 5-minute approval checklist
@@ -178,10 +183,10 @@ Complete index of all PACT documentation for easy reference.
 3. Publish packages
 
 **Evidence Viewer (Auditor Packs):**
-1. From repo root, use the **verified command set (version-pinned)** in [README.md](../README.md#verified-command-set-version-pinned): `pnpm install` → `pnpm -C packages/verifier build` → `./design_partner_bundle/verify_all.sh` → manual pack verify commands → `pnpm --filter @pact/evidence-viewer build` → `pnpm --filter @pact/evidence-viewer dev`. Run viewer dev from the **same repo root** (see [WORKFLOW_CONVENTIONS.md](./WORKFLOW_CONVENTIONS.md)).
-2. Open the URL Vite prints (e.g. http://localhost:5173); load an Auditor Pack ZIP (upload or demo mode)
-3. Use Copy Transcript ID; Export GC View / Insurer Summary PDFs; Generate Claims Intake Package; view Passport Panel
-4. See [gc/EVIDENCE_VIEWER_SPEC.md](./gc/EVIDENCE_VIEWER_SPEC.md) and repo root `apps/evidence-viewer/README.md`
+1. From repo root, use the **verified command set (version-pinned)** in [README.md](../README.md#verified-command-set-version-pinned): `pnpm install` → `./design_partner_bundle/verify_all.sh` → `pnpm --filter @pact/evidence-viewer dev`. Run viewer dev from the **same repo root** (see [WORKFLOW_CONVENTIONS.md](./WORKFLOW_CONVENTIONS.md)).
+2. Open the URL Vite prints (e.g. http://localhost:5173); load an Auditor Pack ZIP (upload or demo dropdown); optionally **Load Passport Snapshot** (JSON from Boxer) for identity badges and trust signals.
+3. Use Copy Transcript ID; Export GC View / Insurer Summary PDFs; Generate Claims Intake Package; view Passport Panel.
+4. See [gc/EVIDENCE_VIEWER_SPEC.md](./gc/EVIDENCE_VIEWER_SPEC.md), [BOXER.md](./BOXER.md) (trust snapshots), and repo root `apps/evidence-viewer/README.md`.
 
 **Passport Registry (multi-source ready):**
 1. Recompute from multiple transcript directories: `node packages/verifier/dist/bin/pact-verifier.js passport-v1-recompute --transcripts-dir dir1 --transcripts-dir dir2`

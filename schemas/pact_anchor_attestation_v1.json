@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://pact.docs/schemas/pact_anchor_attestation_v1.json",
+  "title": "Pact Anchor Attestation v1",
+  "description": "Signed attestation binding an agent signing key to identity claims (KYB, credentials, platform, service account).",
+  "type": "object",
+  "required": [
+    "anchor_id",
+    "subject_signer_public_key_b58",
+    "anchor_type",
+    "issuer_public_key_b58",
+    "issued_at_ms",
+    "payload",
+    "signature_b58",
+    "scheme"
+  ],
+  "properties": {
+    "anchor_id": {
+      "type": "string",
+      "description": "Stable id: anchor- + sha256(canonical payload without signature)",
+      "pattern": "^anchor-[0-9a-f]{64}$"
+    },
+    "subject_signer_public_key_b58": {
+      "type": "string",
+      "description": "Agent public key this attestation binds to (Base58 Ed25519)"
+    },
+    "anchor_type": {
+      "type": "string",
+      "enum": [
+        "kyb_verified",
+        "credential_verified",
+        "platform_verified",
+        "service_account_verified",
+        "domain_verified",
+        "oidc_verified"
+      ],
+      "description": "Type of verification"
+    },
+    "issuer_public_key_b58": {
+      "type": "string",
+      "description": "Registry/issuer public key (Base58 Ed25519)"
+    },
+    "issued_at_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix timestamp milliseconds when issued"
+    },
+    "payload": {
+      "type": "object",
+      "description": "Opaque payload (claims, scope, etc.)"
+    },
+    "signature_b58": {
+      "type": "string",
+      "description": "Ed25519 signature over canonical payload (Base58)"
+    },
+    "scheme": {
+      "type": "string",
+      "enum": ["ed25519"],
+      "description": "Signature scheme"
+    },
+    "display_name": {
+      "type": "string",
+      "description": "Human-readable name e.g. Acme Data LLC"
+    },
+    "verification_method": {
+      "type": "string",
+      "description": "How verified: kyb | oidc | stripe | api_key | service_account | hardware. For platform_verified use stripe for Stripe-linked identities."
+    },
+    "expires_at_ms": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Expiry timestamp ms, null if no expiry"
+    },
+    "revocation_ref": {
+      "type": ["string", "null"],
+      "description": "Stable id for revocation e.g. revocation:<anchor_id>"
+    },
+    "evidence_refs": {
+      "type": ["array", "null"],
+      "items": { "type": "string" },
+      "description": "External reference ids, not documents"
+    }
+  },
+  "additionalProperties": false
+}

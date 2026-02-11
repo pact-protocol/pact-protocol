@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { Manifest, InsurerSummary } from '../types';
+import PartyChip from './PartyChip';
 
 interface PassportPanelProps {
   manifest: Manifest;
@@ -8,6 +9,7 @@ interface PassportPanelProps {
   judgment?: { responsible_signer_pubkey?: string };
   insurerSummary?: InsurerSummary | null;
   transcriptId?: string;
+  onOpenParty?: (pubkey: string) => void;
 }
 
 const SCORE_HELPER =
@@ -69,6 +71,7 @@ export default function PassportPanel({
   gcView,
   judgment,
   insurerSummary,
+  onOpenParty,
 }: PassportPanelProps) {
   const [fullHistoryUseProvider, setFullHistoryUseProvider] = useState(false);
 
@@ -123,10 +126,14 @@ export default function PassportPanel({
         <div className="passport-pubkey-row">
           <span className="passport-pubkey-label">Buyer</span>
           {buyerPubkey ? (
-            <span className="case-meta-copy-row">
-              <code title={buyerPubkey}>{truncate(buyerPubkey, 16)}</code>
-              <CopyButton text={buyerPubkey} />
-            </span>
+            onOpenParty ? (
+              <PartyChip pubkey={buyerPubkey} onOpenParty={onOpenParty} truncateLen={16} />
+            ) : (
+              <span className="case-meta-copy-row">
+                <code title={buyerPubkey}>{truncate(buyerPubkey, 16)}</code>
+                <CopyButton text={buyerPubkey} />
+              </span>
+            )
           ) : (
             <span className="passport-muted">{NOT_PRESENT}</span>
           )}
@@ -134,10 +141,14 @@ export default function PassportPanel({
         <div className="passport-pubkey-row">
           <span className="passport-pubkey-label">Provider</span>
           {providerPubkey ? (
-            <span className="case-meta-copy-row">
-              <code title={providerPubkey}>{truncate(providerPubkey, 16)}</code>
-              <CopyButton text={providerPubkey} />
-            </span>
+            onOpenParty ? (
+              <PartyChip pubkey={providerPubkey} onOpenParty={onOpenParty} truncateLen={16} />
+            ) : (
+              <span className="case-meta-copy-row">
+                <code title={providerPubkey}>{truncate(providerPubkey, 16)}</code>
+                <CopyButton text={providerPubkey} />
+              </span>
+            )
           ) : (
             <span className="passport-muted">{NOT_PRESENT}</span>
           )}
@@ -145,10 +156,14 @@ export default function PassportPanel({
         <div className="passport-pubkey-row">
           <span className="passport-pubkey-label">DBL Responsible Signer</span>
           {dblSigner ? (
-            <span className="case-meta-copy-row">
-              <code title={dblSigner}>{truncate(dblSigner, 16)}</code>
-              <CopyButton text={dblSigner} />
-            </span>
+            onOpenParty ? (
+              <PartyChip pubkey={dblSigner} onOpenParty={onOpenParty} truncateLen={16} />
+            ) : (
+              <span className="case-meta-copy-row">
+                <code title={dblSigner}>{truncate(dblSigner, 16)}</code>
+                <CopyButton text={dblSigner} />
+              </span>
+            )
           ) : (
             <span className="passport-muted">{NOT_PRESENT}</span>
           )}
