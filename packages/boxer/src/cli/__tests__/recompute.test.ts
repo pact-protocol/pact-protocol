@@ -4,8 +4,8 @@
  */
 
 import { describe, it, expect, beforeAll } from "vitest";
-import { readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, existsSync, mkdirSync } from "node:fs";
+import { resolve, dirname } from "node:path";
 import { execSync } from "node:child_process";
 
 const REPO_ROOT = resolve(__dirname, "../../../../..");
@@ -21,6 +21,7 @@ describe("Boxer recompute", () => {
     if (!existsSync(resolve(REPO_ROOT, "packages/boxer/dist/cli/recompute.js"))) {
       execSync("pnpm run build", { cwd: resolve(REPO_ROOT, "packages/boxer"), stdio: "pipe" });
     }
+    mkdirSync(dirname(OUT_ART), { recursive: true });
   });
 
   it("produces snapshot with art domain_ids and anchor badges when run on art pack + anchors", () => {
